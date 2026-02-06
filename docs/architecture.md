@@ -1,7 +1,7 @@
 # Architecture
 
 ## Architecture diagram
-![Serverless Workflow Failure → To-Do Automation Service architecture](./docs/EPA Architecture diagram.png)
+![Serverless Workflow Failure → To-Do Automation Service architecture](./EPA%20Architecture%20diagram.png)
 
 ## Overview
 This service converts workflow failures from multiple producer repositories into actionable To-Do tickets.
