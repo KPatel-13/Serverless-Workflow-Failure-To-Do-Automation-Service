@@ -1,0 +1,1 @@
+# Defines values Terraform should print after applying changes - useful for outputs like resource ARNs or URLs that are needed for later steps in the project.
