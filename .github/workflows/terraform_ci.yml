@@ -1,0 +1,51 @@
+# This workflow runs Terraform "quality checks" (format + validate).
+#   - It does not deploy anything to AWS.
+#   - Purpose: stop broken / badly formatted IaC from being merged to main.
+
+name: Terraform CI
+
+on:
+#Runs on PRs and on Pushes when tf files are changed
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+
+  push:
+    branches: ["main"]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+
+# Principle of least-privilege: this workflow only needs to read repo contents.
+permissions:
+  contents: read
+
+jobs:
+#fmt and validate the terraform code on a runner
+  terraform:
+    name: fmt + validate
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # -recursive: check all Terraform files under the folder
+      - name: Terraform fmt (check)
+        working-directory: infra/terraform
+        run: terraform fmt -check -recursive
+
+      # Initialise Terraform without a backend - for now as AWS access hasnt been introduced yet.
+      - name: Terraform init (no backend)
+        working-directory: infra/terraform
+        run: terraform init -backend=false
+
+      # Validate the Terraform configuration
+      - name: Terraform validate
+        working-directory: infra/terraform
+        run: terraform validate
