@@ -1,7 +1,7 @@
-# This file defines the DynamoDB table used to store the "to-dos" for the application.
+# This file defines the DynamoDB table used to store the "todos" for the application.
 
-resource "aws_dynamodb_table" "to_dos" {
-  name         = "${local.name_prefix}-to_dos"
+resource "aws_dynamodb_table" "todos" {
+  name         = "${local.name_prefix}-todos"
   billing_mode = "PAY_PER_REQUEST"
 
   # Primary key for the table
