@@ -25,9 +25,17 @@ resource "aws_dynamodb_table" "todos" {
 
   global_secondary_index {
     name            = "gsi_repo_status"
-    hash_key        = "repo"
-    range_key       = "status"
     projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "repo"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "status"
+      key_type       = "RANGE"
+    }
   }
 
   tags = local.tags

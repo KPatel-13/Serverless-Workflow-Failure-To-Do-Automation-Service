@@ -5,8 +5,8 @@ resource "aws_apigatewayv2_api" "api" {
   protocol_type = "HTTP"
 
   # CORS so the browser-based UI can call the API
-  cors_configuration {
-    allow_origins = ["*"]
+    cors_configuration {
+    allow_origins = ["*"] # Sprint 1: permissive; tighten to UI domain(s) later
     allow_methods = ["GET", "POST", "PATCH", "OPTIONS"]
     allow_headers = ["content-type", "x-workflow-secret"]
   }
@@ -64,4 +64,31 @@ resource "aws_lambda_permission" "apigw_invoke_lambda" {
 
   # Any method/route from this API can invoke the Lambda
   source_arn = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
+}
+
+resource "aws_cloudwatch_log_group" "apigw_access_logs" {
+  name              = "/aws/apigateway/${local.name_prefix}-http-api"
+  retention_in_days = 14
+  tags              = local.tags
+}
+
+resource "aws_apigatewayv2_stage" "default_stage" {
+  api_id      = aws_apigatewayv2_api.api.id
+  name        = "$default"
+  auto_deploy = true
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.apigw_access_logs.arn
+    format = jsonencode({
+      requestId  = "$context.requestId"
+      ip         = "$context.identity.sourceIp"
+      requestTime= "$context.requestTime"
+      httpMethod = "$context.httpMethod"
+      routeKey   = "$context.routeKey"
+      status     = "$context.status"
+      protocol   = "$context.protocol"
+    })
+  }
+
+  tags = local.tags
 }
