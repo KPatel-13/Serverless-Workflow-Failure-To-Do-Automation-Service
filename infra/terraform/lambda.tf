@@ -1,9 +1,19 @@
 # Packages your Lambda code into a zip that AWS Lambda can run.
 
+# Sprint 1 improvement:
+# archive_file needs the output directory to exist or it can fail on a fresh machine/CI runner.
+resource "null_resource" "build_dir" {
+  provisioner "local-exec" {
+    command = "mkdir -p ${path.module}/.build"
+  }
+}
+
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/../../app"
   output_path = "${path.module}/.build/lambda.zip"
+
+  depends_on = [null_resource.build_dir]
 }
 
 # IAM role that Lambda assumes when it runs
@@ -18,8 +28,6 @@ resource "aws_iam_role" "lambda_role" {
       Action    = "sts:AssumeRole"
     }]
   })
-
-  tags = local.tags
 }
 
 # CloudWatch Logs permissions for Lambda
@@ -32,7 +40,6 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_logs" {
 resource "aws_cloudwatch_log_group" "lambda_log_group" {
   name              = "/aws/lambda/${local.name_prefix}-api"
   retention_in_days = 14
-  tags              = local.tags
 }
 
 # Minimal DynamoDB permissions - will be attached to the Lambda's execution role so it can read/write the "todos" table.
@@ -48,6 +55,7 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",
         "dynamodb:Query"
+        # Add "dynamodb:DeleteItem" later if you implement DELETE /todos/{id}
       ],
       Resource = [
         aws_dynamodb_table.todos.arn,
@@ -87,6 +95,4 @@ resource "aws_lambda_function" "api" {
 
   # Ensure log group exists before first invocation
   depends_on = [aws_cloudwatch_log_group.lambda_log_group]
-
-  tags = local.tags
 }

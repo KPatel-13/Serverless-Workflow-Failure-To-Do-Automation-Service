@@ -12,19 +12,20 @@ resource "aws_dynamodb_table" "todos" {
     type = "S"
   }
 
-  # GSI keys to support dedupe lookup: "open ticket by repo"
   attribute {
     name = "repo"
     type = "S"
   }
 
   attribute {
-    name = "status"
+    name = "fingerprint"
     type = "S"
   }
 
+  # Query the open ticket for a specific failure quickly using repo + fingerprint.
+  # (A repo+status index can't uniquely identify "same failure".)
   global_secondary_index {
-    name            = "gsi_repo_status"
+    name            = "gsi_repo_fingerprint"
     projection_type = "ALL"
 
     key_schema {
@@ -33,10 +34,8 @@ resource "aws_dynamodb_table" "todos" {
     }
 
     key_schema {
-      attribute_name = "status"
+      attribute_name = "fingerprint"
       key_type       = "RANGE"
     }
   }
-
-  tags = local.tags
 }
