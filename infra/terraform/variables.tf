@@ -17,3 +17,10 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "workflow_secret" {
+  description = "Shared secret required by POST /workflow-failure (set per environment). Leave empty for early dev."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
