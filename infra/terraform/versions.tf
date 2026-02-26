@@ -6,7 +6,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.33.0"
+      version = "~> 6.34.0"
     }
 
     # archive provider is used by data "archive_file" (Lambda zip packaging)
