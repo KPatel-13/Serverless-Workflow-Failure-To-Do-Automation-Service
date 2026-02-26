@@ -1,5 +1,7 @@
 # Resources will be added in later steps (DynamoDB, Lambda, API Gateway)
+# Resources are split into separate files by concern:
 
-output "name_prefix" {
-  value = local.name_prefix
-}
+# - dynamodb.tf
+# - lambda.tf
+# - apigw.tf
+# - outputs.tf
