@@ -5,7 +5,7 @@ resource "aws_apigatewayv2_api" "api" {
   protocol_type = "HTTP"
 
   # CORS so the browser-based UI can call the API
-  # Later: will restrict to UI domain.
+  # Later: restrict to your S3/CloudFront UI domain.
   cors_configuration {
     allow_origins = ["*"]
     allow_methods = ["GET", "POST", "PATCH", "OPTIONS"]
@@ -44,6 +44,7 @@ resource "aws_apigatewayv2_route" "route_patch_todo" {
 
 # Stage (deployment)
 
+# Enable API access logs (for debugging during dev) while keeping costs down via retention.
 resource "aws_cloudwatch_log_group" "apigw_access_logs" {
   name              = "/aws/apigateway/${local.name_prefix}-http-api"
   retention_in_days = 14

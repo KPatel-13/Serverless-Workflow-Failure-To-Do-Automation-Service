@@ -1,7 +1,6 @@
 # Packages your Lambda code into a zip that AWS Lambda can run.
 
-# Sprint 1 improvement:
-# archive_file needs the output directory to exist or it can fail on a fresh machine/CI runner.
+# Ensure build directory exists so archive_file can write output_path reliably
 resource "null_resource" "build_dir" {
   provisioner "local-exec" {
     command = "mkdir -p ${path.module}/.build"
@@ -23,11 +22,13 @@ resource "aws_iam_role" "lambda_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Effect    = "Allow",
+      Effect = "Allow",
       Principal = { Service = "lambda.amazonaws.com" },
-      Action    = "sts:AssumeRole"
+      Action = "sts:AssumeRole"
     }]
   })
+
+  tags = local.tags
 }
 
 # CloudWatch Logs permissions for Lambda
@@ -40,9 +41,10 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_logs" {
 resource "aws_cloudwatch_log_group" "lambda_log_group" {
   name              = "/aws/lambda/${local.name_prefix}-api"
   retention_in_days = 14
+  tags              = local.tags
 }
 
-# Minimal DynamoDB permissions - will be attached to the Lambda's execution role so it can read/write the "todos" table.
+# Minimal DynamoDB permissions - attached to Lambda's execution role so it can read/write the "todos" table.
 resource "aws_iam_policy" "lambda_dynamodb_policy" {
   name = "${local.name_prefix}-lambda-dynamodb"
 
@@ -58,11 +60,15 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
         # Add "dynamodb:DeleteItem" later if you implement DELETE /todos/{id}
       ],
       Resource = [
+        # Base table
         aws_dynamodb_table.todos.arn,
+        # Allow querying any GSI/LSI on this table (incl. gsi_repo_fingerprint)
         "${aws_dynamodb_table.todos.arn}/index/*"
       ]
     }]
   })
+
+  tags = local.tags
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_dynamodb_attach" {
@@ -88,11 +94,15 @@ resource "aws_lambda_function" "api" {
   # Environment variables used by handler.py
   environment {
     variables = {
-      TODOS_TABLE     = aws_dynamodb_table.todos.name
+      TODOS_TABLE = aws_dynamodb_table.todos.name
+
+      # Sprint 1: can be blank; later injected via TF_VAR_workflow_secret / CI secrets
       WORKFLOW_SECRET = var.workflow_secret
     }
   }
 
   # Ensure log group exists before first invocation
   depends_on = [aws_cloudwatch_log_group.lambda_log_group]
+
+  tags = local.tags
 }
