@@ -6,6 +6,8 @@ dependencies = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
 # - The path pytest can get the tests from
 addopts = "-q"
 # - will give smaller error logs (quieter)
