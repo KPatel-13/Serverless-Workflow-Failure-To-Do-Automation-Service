@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 from datetime import UTC, datetime
 
 
@@ -77,7 +78,25 @@ def require_secret(headers: dict) -> None:
         raise ServiceError("UNAUTHORIZED", "Missing or invalid X-Workflow-Secret")
 
 
-def compute_fingerprint(repo: str, workflow_name: str, job_name: str, summary: str, details: str | None) -> str:
+def _norm(value: str | None) -> str:
+    """
+    Normalize text so small formatting differences don't change the fingerprint.
+
+    Why:
+    - Some systems send newlines, tabs, or multiple spaces in details/summary.
+    - Dedupe should treat those as the same failure cause.
+    """
+    if value is None:
+        return ""
+    value = value.strip().lower()
+    # Collapse any whitespace (space/newline/tab) into a single space
+    value = re.sub(r"\s+", " ", value)
+    return value
+
+
+def compute_fingerprint(
+    repo: str, workflow_name: str, job_name: str, summary: str, details: str | None
+) -> str:
     """
     Compute a deterministic SHA-256 fingerprint.
 
@@ -85,18 +104,19 @@ def compute_fingerprint(repo: str, workflow_name: str, job_name: str, summary: s
     - Dedupe rule: same failure cause should map to same fingerprint.
     - SHA-256 is reliable and standard.
 
-    Implementation:
-    - Normalize inputs: strip + lower
-    - Join into one string
-    - sha256 → hex
+    Important fix:
+    - We normalize whitespace so 'Details\\nx' and 'details  x' produce the same fingerprint.
     """
-    details = details or ""
     stable = (
-        repo.strip().lower()
-        + "|" + workflow_name.strip().lower()
-        + "|" + job_name.strip().lower()
-        + "|" + summary.strip().lower()
-        + "|" + details.strip().lower()
+        _norm(repo)
+        + "|"
+        + _norm(workflow_name)
+        + "|"
+        + _norm(job_name)
+        + "|"
+        + _norm(summary)
+        + "|"
+        + _norm(details)
     )
     return hashlib.sha256(stable.encode("utf-8")).hexdigest()
 
@@ -167,8 +187,8 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             updated += 1
             continue
 
-        # 2) if DONE ticket exists, reopen it (Sprint 2 default)
-        existing = repo_obj.get_by_id(fp)  # Sprint 2: id == fingerprint
+        # 2) if DONE ticket exists, reopen it
+        existing = repo_obj.get_by_id(fp)  # id == fingerprint
         if existing and existing.get("status") == "done":
             existing["status"] = "open"
             existing["resolvedAt"] = None
@@ -183,7 +203,7 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
 
         # 3) create a new ticket
         ticket = {
-            "id": fp,  # simplest Sprint 2 approach
+            "id": fp,
             "fingerprint": fp,
             "status": "open",
             "title": f"{f['jobName']} failed: {f['summary']}",
@@ -212,7 +232,9 @@ def list_todos(repo_obj, status: str | None) -> dict:
     Implements GET /todos?status=open|done
     """
     if status and status not in ("open", "done"):
-        raise ServiceError("VALIDATION_ERROR", "Invalid status filter", ["status must be open|done"])
+        raise ServiceError(
+            "VALIDATION_ERROR", "Invalid status filter", ["status must be open|done"]
+        )
     return {"items": repo_obj.list_tickets(status=status)}
 
 

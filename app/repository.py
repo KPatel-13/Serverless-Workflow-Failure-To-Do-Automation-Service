@@ -1,4 +1,3 @@
-
 class LocalRepository:
     """
     In-memory storage used for local tests.

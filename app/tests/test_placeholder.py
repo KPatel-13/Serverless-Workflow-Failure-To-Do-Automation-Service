@@ -3,14 +3,14 @@ import json
 import pytest
 
 from app.handler import lambda_handler
-from app.repository import FakeRepository
+from app.repository import LocalRepository
 from app.service import compute_fingerprint
 
 
 @pytest.fixture()
 def repo():
     # fresh in-memory repo per test
-    return FakeRepository()
+    return LocalRepository()
 
 
 def api_event(method, path, body=None, headers=None, query=None):
@@ -44,7 +44,9 @@ def test_post_unauthorized(repo, monkeypatch):
 
 def test_post_invalid_json(repo, monkeypatch):
     monkeypatch.setenv("WORKFLOW_SECRET", "expected")
-    evt = api_event("POST", "/workflow-failure", body="{not-json", headers={"X-Workflow-Secret": "expected"})
+    evt = api_event(
+        "POST", "/workflow-failure", body="{not-json", headers={"X-Workflow-Secret": "expected"}
+    )
     res = lambda_handler(evt, None, repo=repo)
     assert res["statusCode"] == 400
     assert json.loads(res["body"])["error"]["code"] == "INVALID_JSON"
@@ -61,14 +63,26 @@ def test_create_then_dedupe_update(repo, monkeypatch):
         "failures": [{"jobName": "build", "summary": "failed", "details": "x"}],
     }
 
-    res1 = lambda_handler(api_event("POST", "/workflow-failure", body=body, headers={"X-Workflow-Secret": "expected"}), None, repo=repo)
+    res1 = lambda_handler(
+        api_event(
+            "POST", "/workflow-failure", body=body, headers={"X-Workflow-Secret": "expected"}
+        ),
+        None,
+        repo=repo,
+    )
     assert res1["statusCode"] == 202
     assert json.loads(res1["body"]) == {"ok": True, "created": 1, "updated": 0, "reopened": 0}
 
     body["runId"] = "2"
     body["runUrl"] = "https://example/run/2"
 
-    res2 = lambda_handler(api_event("POST", "/workflow-failure", body=body, headers={"X-Workflow-Secret": "expected"}), None, repo=repo)
+    res2 = lambda_handler(
+        api_event(
+            "POST", "/workflow-failure", body=body, headers={"X-Workflow-Secret": "expected"}
+        ),
+        None,
+        repo=repo,
+    )
     assert json.loads(res2["body"]) == {"ok": True, "created": 0, "updated": 1, "reopened": 0}
 
     fp = compute_fingerprint("owner/repo", "CI", "build", "failed", "x")
@@ -87,16 +101,26 @@ def test_patch_resolve_and_unresolve(repo, monkeypatch):
         "runUrl": "https://example/run/1",
         "failures": [{"jobName": "build", "summary": "failed"}],
     }
-    lambda_handler(api_event("POST", "/workflow-failure", body=body, headers={"X-Workflow-Secret": "expected"}), None, repo=repo)
+    lambda_handler(
+        api_event(
+            "POST", "/workflow-failure", body=body, headers={"X-Workflow-Secret": "expected"}
+        ),
+        None,
+        repo=repo,
+    )
 
     fp = compute_fingerprint("owner/repo", "CI", "build", "failed", None)
 
-    res_done = lambda_handler(api_event("PATCH", f"/todos/{fp}", body={"status": "done"}), None, repo=repo)
+    res_done = lambda_handler(
+        api_event("PATCH", f"/todos/{fp}", body={"status": "done"}), None, repo=repo
+    )
     done_ticket = json.loads(res_done["body"])
     assert done_ticket["status"] == "done"
     assert done_ticket["resolvedAt"] is not None
 
-    res_open = lambda_handler(api_event("PATCH", f"/todos/{fp}", body={"status": "open"}), None, repo=repo)
+    res_open = lambda_handler(
+        api_event("PATCH", f"/todos/{fp}", body={"status": "open"}), None, repo=repo
+    )
     open_ticket = json.loads(res_open["body"])
     assert open_ticket["status"] == "open"
     assert open_ticket["resolvedAt"] is None
