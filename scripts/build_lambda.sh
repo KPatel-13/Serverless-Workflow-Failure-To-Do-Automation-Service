@@ -14,7 +14,7 @@ rm -rf "$BUILD" "$OUT"
 mkdir -p "$BUILD"
 
 python -m pip install --upgrade pip >/dev/null
-python -m pip install -r "$ROOT/requirements.txt" -t "$BUILD" >/dev/null
+python -m pip install -r "$ROOT/requirements-dev.txt" -t "$BUILD" >/dev/null
 
 mkdir -p "$BUILD/app"
 cp -r "$ROOT/app/"*.py "$BUILD/app/"
