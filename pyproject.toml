@@ -5,7 +5,9 @@ requires-python = ">=3.11"
 dependencies = []
 
 [tool.pytest.ini_options]
-testpaths = ["app/tests"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
 # - The path pytest can get the tests from
 addopts = "-q"
 # - will give smaller error logs (quieter)

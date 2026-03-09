@@ -1,17 +1,16 @@
-# This workflow runs automated checks so we catch issues before merging to main.
+# This workflow runs automated checks so we catch issues before merging.
 
 name: CI
 
 on:
-  pull_request:
-  push:
-    branches: [ "main" ]
+  push:              # run on pushes to ANY branch
+  pull_request:      # run on PRs
+  workflow_dispatch: # allow manual "Run workflow" from the Actions tab
 
 permissions:
   contents: read
 
 jobs:
-    # Linting
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -32,7 +31,6 @@ jobs:
       - name: Ruff lint
         run: ruff check .
 
-    # Formatting check
   format:
     name: Format (ruff)
     runs-on: ubuntu-latest
@@ -50,12 +48,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      # Check formatting without changing files
       - name: Ruff format (check)
         run: ruff format --check .
 
   tests:
-    # Run unit tests
     name: Tests (pytest)
     runs-on: ubuntu-latest
     steps:
@@ -76,7 +72,6 @@ jobs:
         run: pytest
 
   security:
-    # Security checks
     name: Security (bandit + pip-audit)
     runs-on: ubuntu-latest
     steps:
@@ -93,10 +88,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-        # Bandit finds insecure coding patterns.
       - name: Bandit (advisory)
         run: bandit -q -r app || true
 
-        # pip-audit checks dependencies for known vulnerabilities.
       - name: pip-audit (advisory)
         run: pip-audit || true
+
+  build:
+    name: Build lambda.zip (linux)
+    runs-on: ubuntu-latest
+    needs: [lint, format, tests] # only build if core checks pass
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Build lambda.zip
+        run: |
+          chmod +x scripts/build_lambda.sh
+          ./scripts/build_lambda.sh
+
+      - name: Upload lambda.zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zip
+          path: lambda.zip
