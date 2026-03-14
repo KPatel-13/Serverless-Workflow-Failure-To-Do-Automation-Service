@@ -13,12 +13,13 @@ resource "aws_apigatewayv2_api" "api" {
   }
 }
 
-# Integration: API -> Lambda
+# Integration from API Gateway to Lambda.
 
 resource "aws_apigatewayv2_integration" "api_to_lambda" {
   api_id                 = aws_apigatewayv2_api.api.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.api.arn
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  integration_method     = "POST"
   payload_format_version = "2.0"
 }
 
@@ -69,14 +70,13 @@ resource "aws_apigatewayv2_stage" "default_stage" {
   }
 }
 
-# Permission: allow API Gateway to call Lambda
-
+# Allow API Gateway to invoke the Lambda function.
 resource "aws_lambda_permission" "apigw_invoke_lambda" {
   statement_id  = "AllowInvokeFromApiGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.api.function_name
   principal     = "apigateway.amazonaws.com"
 
-  # Any method/route from this API can invoke the Lambda
+  # Any method/route from this API can invoke the Lambda.
   source_arn = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
 }
