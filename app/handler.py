@@ -94,7 +94,6 @@ def lambda_handler(event: dict, context: Any, repo=None) -> dict:
         headers = event.get("headers") or {}
 
         # Structured logs are easier to search in CloudWatch.
-        # We intentionally do NOT log request bodies or secrets.
         logger.info(
             json.dumps(
                 {
@@ -165,6 +164,5 @@ def lambda_handler(event: dict, context: Any, repo=None) -> dict:
         return error(status_code, se.code, se.message, se.details)
 
     except Exception as e:
-        # Prevent raw tracebacks leaking to clients, but still log them in CloudWatch.
         logger.exception("unhandled_exception")
         return error(500, "INTERNAL_ERROR", "Unexpected error", str(e))

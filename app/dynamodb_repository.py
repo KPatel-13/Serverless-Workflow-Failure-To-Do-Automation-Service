@@ -51,9 +51,7 @@ class DynamoDBRepository:
         return None
 
     def query_by_repo_and_fingerprint(self, repo: str, fingerprint: str) -> list[dict]:
-        """
-        Forward-looking helper using the GSI directly.
-        """
+        """Forward-looking helper using the GSI directly."""
         response = self.table.query(
             IndexName="gsi_repo_fingerprint",
             KeyConditionExpression="repo = :repo AND fingerprint = :fingerprint",
@@ -72,29 +70,20 @@ class DynamoDBRepository:
         - Table size is expected to stay small
         - Simpler than designing more indexes too early
         """
+        scan_kwargs = {}
         if status:
-            response = self.table.scan(
-                FilterExpression="#s = :status",
-                ExpressionAttributeNames={"#s": "status"},
-                ExpressionAttributeValues={":status": status},
-            )
-        else:
-            response = self.table.scan()
+            scan_kwargs = {
+                "FilterExpression": "#s = :status",
+                "ExpressionAttributeNames": {"#s": "status"},
+                "ExpressionAttributeValues": {":status": status},
+            }
 
+        response = self.table.scan(**scan_kwargs)
         items = response.get("Items", [])
 
         while "LastEvaluatedKey" in response:
-            if status:
-                response = self.table.scan(
-                    FilterExpression="#s = :status",
-                    ExpressionAttributeNames={"#s": "status"},
-                    ExpressionAttributeValues={":status": status},
-                    ExclusiveStartKey=response["LastEvaluatedKey"],
-                )
-            else:
-                response = self.table.scan(
-                    ExclusiveStartKey=response["LastEvaluatedKey"]
-                )
+            scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+            response = self.table.scan(**scan_kwargs)
             items.extend(response.get("Items", []))
 
         return items
