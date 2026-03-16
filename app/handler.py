@@ -71,7 +71,7 @@ def error(status_code: int, code: str, message: str, details: Any = None) -> dic
     return response(status_code, {"error": err_obj})
 
 
-def lambda_handler(event: dict, context: Any) -> dict:
+def lambda_handler(event: dict, context: Any, repo=None) -> dict:
     """
     Lambda entrypoint.
 
@@ -79,8 +79,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
     - handler.py does HTTP/Lambda plumbing only
     - service.py owns business logic
     - repository classes own storage details
+
+    repo=None is kept so:
+    - Tests can inject a local/fake repo directly
+    - AWS runtime can auto-select DynamoDB via get_repo()
     """
-    repo = get_repo()
+    if repo is None:
+        repo = get_repo()
 
     try:
         http = event.get("requestContext", {}).get("http", {}) or {}

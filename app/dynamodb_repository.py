@@ -6,7 +6,7 @@ class DynamoDBRepository:
     DynamoDB-backed repository implementation.
 
     Why this version keeps more complexity:
-    - Supports  existing GSI design on (repo, fingerprint)
+    - Supports existing GSI design on (repo, fingerprint)
     - Leaves room for more targeted lookup/query patterns later
     - Still keeps the same method interface as LocalRepository
     """
