@@ -84,7 +84,7 @@ resource "aws_iam_role_policy_attachment" "lambda_dynamodb_attach" {
 resource "aws_lambda_function" "api" {
   function_name = "${local.name_prefix}-api"
   role          = aws_iam_role.lambda_role.arn
-#name of the handler function within the code with the format file_name.function_name.
+  #name of the handler function within the code with the format file_name.function_name.
   handler = "app.handler.lambda_handler"
   runtime = "python3.11"
 
@@ -93,7 +93,7 @@ resource "aws_lambda_function" "api" {
 
   filename         = "${path.module}/../../lambda.zip"
   source_code_hash = filebase64sha256("${path.module}/../../lambda.zip")
-# env variables for the lambda function, including the DynamoDB table name and workflow secret
+  # env variables for the lambda function, including the DynamoDB table name and workflow secret
   environment {
     variables = {
       # Tells handler.py to use DynamoDBRepository in AWS

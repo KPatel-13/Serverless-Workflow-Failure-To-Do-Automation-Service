@@ -1,4 +1,18 @@
+from decimal import Decimal
+
 import boto3
+
+
+def _to_plain(value):
+    """Convert DynamoDB Decimal values into normal Python JSON-safe values."""
+    if isinstance(value, list):
+        return [_to_plain(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _to_plain(v) for k, v in value.items()}
+    if isinstance(value, Decimal):
+        # Keep whole numbers as int, fractional numbers as float.
+        return int(value) if value % 1 == 0 else float(value)
+    return value
 
 
 class DynamoDBRepository:
@@ -17,24 +31,15 @@ class DynamoDBRepository:
         self.table = dynamodb.Table(table_name)
 
     def get_by_id(self, ticket_id: str) -> dict | None:
-        """
-        Fetch a single ticket by primary key.
-
-        Why:
-        - The service uses id == fingerprint for direct ticket retrieval.
-        """
+        """Fetch a single ticket by primary key."""
         response = self.table.get_item(Key={"id": ticket_id})
-        return response.get("Item")
+        item = response.get("Item")
+        return _to_plain(item) if item else None
 
     def upsert(self, ticket: dict) -> dict:
-        """
-        Insert or replace a ticket.
-
-        Why:
-        - The service layer prepares the full ticket state.
-        """
+        """Insert or replace a ticket."""
         self.table.put_item(Item=ticket)
-        return ticket
+        return _to_plain(ticket)
 
     def get_open_by_fingerprint(self, fingerprint: str) -> dict | None:
         """
@@ -43,7 +48,6 @@ class DynamoDBRepository:
         Why:
         - In the current service design, id == fingerprint.
         - So the fastest lookup is still GetItem by id.
-        - DynamoDB table/index design is still kept for future use.
         """
         item = self.get_by_id(fingerprint)
         if item and item.get("status") == "open":
@@ -60,7 +64,7 @@ class DynamoDBRepository:
                 ":fingerprint": fingerprint,
             },
         )
-        return response.get("Items", [])
+        return _to_plain(response.get("Items", []))
 
     def list_tickets(self, status: str | None = None) -> list[dict]:
         """
@@ -86,4 +90,4 @@ class DynamoDBRepository:
             response = self.table.scan(**scan_kwargs)
             items.extend(response.get("Items", []))
 
-        return items
+        return _to_plain(items)
