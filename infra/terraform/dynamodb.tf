@@ -1,5 +1,12 @@
 # This file defines the DynamoDB table used to store the "todos" for the application.
 
+# DynamoDB table used to store workflow failure tickets ("todos").
+#
+# Why this design:
+# - Primary key "id" stores the ticket id (currently the fingerprint)
+# - Extra attributes "repo" and "fingerprint" support future query patterns
+# - GSI on (repo, fingerprint) gives us a richer model ahead of later sprints
+
 resource "aws_dynamodb_table" "todos" {
   name         = "${local.name_prefix}-todos"
   billing_mode = "PAY_PER_REQUEST"
@@ -38,4 +45,6 @@ resource "aws_dynamodb_table" "todos" {
       key_type       = "RANGE"
     }
   }
+
+  tags = local.tags
 }
