@@ -1,4 +1,4 @@
-# This workflow runs automated checks so we catch issues before merging.
+# This workflow runs automated application checks so we catch issues before merging.
 
 name: CI
 
@@ -11,9 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint (ruff)
+  quality:
+    name: Quality checks
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -22,82 +23,46 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: "pip" # speeds up installs between workflow runs
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
-      - name: Install dev deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+          # Install runtime dependencies only if the file is not empty.
+          if [ -s requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Ruff lint
-        run: ruff check .
-
-  format:
-    name: Format (ruff)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install dev deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+        run: python -m ruff check .
 
       - name: Ruff format (check)
-        run: ruff format --check .
-
-  tests:
-    name: Tests (pytest)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install dev deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+        run: python -m ruff format --check .
 
       - name: Pytest
-        run: pytest
+        run: python -m pytest
 
-  security:
-    name: Security (bandit + pip-audit)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - name: Bandit
+        run: python -m bandit -q -r app
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install dev deps
+      - name: pip-audit (runtime only)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-
-      - name: Bandit (advisory)
-        run: bandit -q -r app || true
-
-      - name: pip-audit (advisory)
-        run: pip-audit || true
+          # Audit only deployed/runtime dependencies.
+          # This avoids dev-tool findings from pytest / pip-audit itself
+          # showing up as if they were Lambda production risks.
+          if [ -s requirements.txt ]; then
+            python -m pip_audit -r requirements.txt
+          else
+            echo "requirements.txt is empty; skipping runtime dependency audit"
+          fi
 
   build:
     name: Build lambda.zip (linux)
     runs-on: ubuntu-latest
-    needs: [lint, format, tests] # only build if core checks pass
+    needs: [quality] # only build if all quality checks pass
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -106,6 +71,10 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install zip
         run: |
