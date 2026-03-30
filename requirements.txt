@@ -1,0 +1,2 @@
+# Runtime Python dependencies for the Lambda application.
+# Leaving empty for now as the Lambda only uses the python standard library and AWS-managed runtime libraries.
