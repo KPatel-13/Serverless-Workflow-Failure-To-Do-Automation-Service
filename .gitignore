@@ -30,6 +30,12 @@ build/
 crash.log
 crash.*.log
 
+# Terraform local secret overrides
+*.auto.tfvars
+*.auto.tfvars.json
+secret.tfvars
+local.secret.tfvars
+
 # ----------------------------
 # Project build outputs
 # ----------------------------
