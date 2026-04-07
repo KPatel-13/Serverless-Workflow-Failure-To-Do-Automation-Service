@@ -64,15 +64,34 @@ def require_secret(headers: dict) -> None:
 
     Note:
     - We treat empty WORKFLOW_SECRET as misconfigured and reject (more secure).
+
+    Temporary debug:
+    - We log whether the secret is present and whether it matched.
+    - We do NOT log the actual secret values.
     """
     expected = os.getenv("WORKFLOW_SECRET", "")
     provided = ""
 
-    # Headers can come in different casing; we check case-insensitively.
+    # Headers (case-insensitive check).
     for k, v in (headers or {}).items():
         if str(k).lower() == "x-workflow-secret":
             provided = str(v)
             break
+
+    print(
+        json.dumps(
+            {
+                "auth_debug": {
+                    "header_keys": list((headers or {}).keys()),
+                    "expected_present": bool(expected),
+                    "provided_present": bool(provided),
+                    "expected_len": len(expected),
+                    "provided_len": len(provided),
+                    "match": bool(expected) and provided == expected,
+                }
+            }
+        )
+    )
 
     if not expected or provided != expected:
         raise ServiceError("UNAUTHORIZED", "Missing or invalid X-Workflow-Secret")
@@ -153,6 +172,23 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
     if not isinstance(payload["failures"], list):
         raise ServiceError("VALIDATION_ERROR", "failures must be a list")
 
+    # Temporary debug:
+    # This tells us in CloudWatch whether the request really reached the service
+    # and what top-level workflow metadata it carried.
+    print(
+        json.dumps(
+            {
+                "ingest_debug": {
+                    "repo": payload["repo"],
+                    "workflowName": payload["workflowName"],
+                    "runId": payload["runId"],
+                    "runUrl": payload["runUrl"],
+                    "failureCount": len(payload["failures"]),
+                }
+            }
+        )
+    )
+
     created = 0
     updated = 0
     reopened = 0
@@ -175,6 +211,22 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             f.get("details"),
         )
 
+        # Temporary debug:
+        # Logs the per-failure values that determine dedupe.
+        print(
+            json.dumps(
+                {
+                    "ingest_failure_debug": {
+                        "jobName": f["jobName"],
+                        "summary": f["summary"],
+                        "details": f.get("details"),
+                        "severity": f.get("severity"),
+                        "fingerprint": fp,
+                    }
+                }
+            )
+        )
+
         # 1) if an OPEN ticket exists, update it (dedupe)
         open_ticket = repo_obj.get_open_by_fingerprint(fp)
         if open_ticket:
@@ -184,6 +236,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             open_ticket["runId"] = payload["runId"]
             open_ticket["runUrl"] = payload["runUrl"]
             repo_obj.upsert(open_ticket)
+
+            print(json.dumps({"ingest_result": {"action": "updated", "id": open_ticket["id"]}}))
+
             updated += 1
             continue
 
@@ -198,6 +253,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             existing["runId"] = payload["runId"]
             existing["runUrl"] = payload["runUrl"]
             repo_obj.upsert(existing)
+
+            print(json.dumps({"ingest_result": {"action": "reopened", "id": existing["id"]}}))
+
             reopened += 1
             continue
 
@@ -222,6 +280,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             "resolvedAt": None,
         }
         repo_obj.upsert(ticket)
+
+        print(json.dumps({"ingest_result": {"action": "created", "id": ticket["id"]}}))
+
         created += 1
 
     return {"ok": True, "created": created, "updated": updated, "reopened": reopened}
