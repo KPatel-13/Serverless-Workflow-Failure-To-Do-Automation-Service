@@ -5,7 +5,6 @@ name: CI
 on:
   push:              # run on pushes to ANY branch
   pull_request:      # run on PRs
-  workflow_dispatch: # allow manual "Run workflow" from the Actions tab
 
 permissions:
   contents: read

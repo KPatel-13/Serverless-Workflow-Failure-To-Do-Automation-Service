@@ -9,14 +9,9 @@ on:
       - main
   workflow_dispatch:
 
-# Needed for:
-# - reading the repository contents
-# - requesting an OIDC token so GitHub Actions can assume the AWS IAM role
 permissions:
   contents: read
-  id-token: write
 
-# Prevent two dev deployments running at the same time.
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
@@ -61,7 +56,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
       - name: Verify AWS caller identity
