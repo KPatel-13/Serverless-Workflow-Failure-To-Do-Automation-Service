@@ -1,0 +1,10 @@
+# Runs local pre-commit checks before commits are created.
+# Gitleaks helps catch accidentally committed secrets early.
+
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
