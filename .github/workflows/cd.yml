@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
 
+# Prevent two dev deployments running at the same time.
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
@@ -63,9 +64,12 @@ jobs:
       - name: Verify AWS caller identity
         run: aws sts get-caller-identity
 
+      # Important:
+      # - This uses the shared remote backend for dev state.
+      # - That lets GitHub Actions and local Terraform use the same state.
       - name: Terraform init
         working-directory: infra/terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config="env/dev-backend.hcl"
 
       - name: Terraform plan
         working-directory: infra/terraform
