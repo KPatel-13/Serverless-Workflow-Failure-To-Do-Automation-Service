@@ -1,5 +1,5 @@
 # Manually promotes a known-good tagged version to production.
-# The tag should point to a commit that has already been deployed and tested in dev.
+# The selected tag should point to a commit already proven in dev.
 
 name: Promote to Prod
 
@@ -14,6 +14,7 @@ on:
 permissions:
   contents: read
 
+# Prevent two production deployments from running at the same time.
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
@@ -67,9 +68,12 @@ jobs:
       - name: Verify AWS caller identity
         run: aws sts get-caller-identity
 
+      # Important:
+      # - This uses the separate prod backend state.
+      # - That keeps production state isolated from dev.
       - name: Terraform init
         working-directory: infra/terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config="env/prod.backend.hcl"
 
       - name: Terraform plan
         working-directory: infra/terraform
