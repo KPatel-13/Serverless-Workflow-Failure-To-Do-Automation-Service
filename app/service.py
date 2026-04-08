@@ -56,18 +56,14 @@ def parse_json_body(raw: str | None) -> dict:
 
 def require_secret(headers: dict) -> None:
     """
-    Enforce the X-Workflow-Secret header for POST /workflow-failure.
+    Enforce the X-Workflow-Secret header for protected routes.
 
     Why:
-    - Prevent random users from creating tickets.
-    - Matches your intended contract.
+    - Prevent random users from creating or changing tickets.
+    - Matches the intended contract.
 
     Note:
     - We treat empty WORKFLOW_SECRET as misconfigured and reject (more secure).
-
-    Temporary debug:
-    - We log whether the secret is present and whether it matched.
-    - We do NOT log the actual secret values.
     """
     expected = os.getenv("WORKFLOW_SECRET", "")
     provided = ""
@@ -77,21 +73,6 @@ def require_secret(headers: dict) -> None:
         if str(k).lower() == "x-workflow-secret":
             provided = str(v)
             break
-
-    print(
-        json.dumps(
-            {
-                "auth_debug": {
-                    "header_keys": list((headers or {}).keys()),
-                    "expected_present": bool(expected),
-                    "provided_present": bool(provided),
-                    "expected_len": len(expected),
-                    "provided_len": len(provided),
-                    "match": bool(expected) and provided == expected,
-                }
-            }
-        )
-    )
 
     if not expected or provided != expected:
         raise ServiceError("UNAUTHORIZED", "Missing or invalid X-Workflow-Secret")
@@ -172,23 +153,6 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
     if not isinstance(payload["failures"], list):
         raise ServiceError("VALIDATION_ERROR", "failures must be a list")
 
-    # Temporary debug:
-    # This tells us in CloudWatch whether the request really reached the service
-    # and what top-level workflow metadata it carried.
-    print(
-        json.dumps(
-            {
-                "ingest_debug": {
-                    "repo": payload["repo"],
-                    "workflowName": payload["workflowName"],
-                    "runId": payload["runId"],
-                    "runUrl": payload["runUrl"],
-                    "failureCount": len(payload["failures"]),
-                }
-            }
-        )
-    )
-
     created = 0
     updated = 0
     reopened = 0
@@ -209,22 +173,6 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             f["jobName"],
             f["summary"],
             f.get("details"),
-        )
-
-        # Temporary debug:
-        # Logs the per-failure values that determine dedupe.
-        print(
-            json.dumps(
-                {
-                    "ingest_failure_debug": {
-                        "jobName": f["jobName"],
-                        "summary": f["summary"],
-                        "details": f.get("details"),
-                        "severity": f.get("severity"),
-                        "fingerprint": fp,
-                    }
-                }
-            )
         )
 
         # 1) if an OPEN ticket exists, update it (dedupe)
@@ -299,11 +247,13 @@ def list_todos(repo_obj, status: str | None) -> dict:
     return {"items": repo_obj.list_tickets(status=status)}
 
 
-def patch_todo_status(repo_obj, ticket_id: str, payload: dict) -> dict:
+def patch_todo_status(repo_obj, headers: dict, ticket_id: str, payload: dict) -> dict:
     """
     Implements PATCH /todos/{id}
     Body: {"status":"open"|"done"}
     """
+    require_secret(headers)
+
     status = payload.get("status")
     if status not in ("open", "done"):
         raise ServiceError("VALIDATION_ERROR", "Invalid status", ["status must be open|done"])
