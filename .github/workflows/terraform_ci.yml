@@ -1,28 +1,38 @@
 # This workflow runs Terraform "quality checks" (format + validate).
 #   - It does not deploy anything to AWS.
 #   - Purpose: stop broken / badly formatted IaC from being merged to main.
+#
+# Important note:
+# - That means lambda.zip must exist before validate runs.
+# - So this workflow builds lambda.zip only for validation purposes.
 
 name: Terraform CI
 
 on:
-#Runs on PRs and on Pushes when tf files are changed
+  # Runs on PRs and on pushes when Terraform or related packaging files are changed.
   pull_request:
     paths:
       - "infra/**"
       - ".github/workflows/terraform_ci.yml"
+      - "scripts/build_lambda.sh"
+      - "app/**"
+      - "requirements.txt"
 
   push:
     branches: ["main"]
     paths:
       - "infra/**"
       - ".github/workflows/terraform_ci.yml"
+      - "scripts/build_lambda.sh"
+      - "app/**"
+      - "requirements.txt"
 
 # Principle of least-privilege: this workflow only needs to read repo contents.
 permissions:
   contents: read
 
 jobs:
-#fmt and validate the terraform code on a runner
+  # Format and validate the Terraform code on a runner.
   terraform:
     name: fmt + validate
 
@@ -34,16 +44,53 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
+        with:
+          # Disables the extra Terraform wrapper output.
+          # This keeps logs simpler and avoids wrapper-specific behaviour.
+          terraform_wrapper: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      # Why build lambda.zip here:
+      # - terraform validate reads source_code_hash from lambda.tf
+      # - source_code_hash uses filebase64sha256("../../lambda.zip")
+      # - if lambda.zip is missing, validate fails before it can assess the config
+      #
+      # This does NOT deploy anything.
+      # It only creates the local file Terraform expects to exist during validation.
+      - name: Build lambda.zip for Terraform validation
+        run: |
+          chmod +x scripts/build_lambda.sh
+          ./scripts/build_lambda.sh
+
+      - name: Check lambda.zip exists
+        run: test -f lambda.zip
 
       # -recursive: check all Terraform files under the folder
       - name: Terraform fmt (check)
         working-directory: infra/terraform
         run: terraform fmt -check -recursive
 
-      # Initialise Terraform without a backend - for now as AWS access hasnt been introduced yet.
+      # Initialise Terraform without a backend.
+      #
+      # Why:
+      # - validate requires providers/modules to be initialised
+      # - backend=false keeps this as a pure validation job and avoids backend access
       - name: Terraform init (no backend)
         working-directory: infra/terraform
-        run: terraform init -backend=false
+        run: terraform init -backend=false -input=false
 
       # Validate the Terraform configuration
       - name: Terraform validate
