@@ -20,8 +20,12 @@ variable "environment" {
 }
 
 variable "workflow_secret" {
-  description = "Shared secret required by POST /workflow-failure (set per environment). Leave empty for early dev."
+  description = "Shared secret required by POST /workflow-failure. Must be provided per environment."
   type        = string
   sensitive   = true
-  default     = ""
+
+  validation {
+    condition     = length(trimspace(var.workflow_secret)) > 0
+    error_message = "workflow_secret must be provided and must not be empty."
+  }
 }

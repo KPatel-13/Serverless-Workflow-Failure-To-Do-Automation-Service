@@ -148,7 +148,12 @@ def test_patch_resolve_and_unresolve(repo, monkeypatch):
     fp = compute_fingerprint("owner/repo", "CI", "build", "failed", None)
 
     res_done = lambda_handler(
-        api_event("PATCH", f"/todos/{fp}", body={"status": "done"}),
+        api_event(
+            "PATCH",
+            f"/todos/{fp}",
+            body={"status": "done"},
+            headers={"X-Workflow-Secret": "expected"},
+        ),
         None,
         repo=repo,
     )
@@ -157,7 +162,12 @@ def test_patch_resolve_and_unresolve(repo, monkeypatch):
     assert done_ticket["resolvedAt"] is not None
 
     res_open = lambda_handler(
-        api_event("PATCH", f"/todos/{fp}", body={"status": "open"}),
+        api_event(
+            "PATCH",
+            f"/todos/{fp}",
+            body={"status": "open"},
+            headers={"X-Workflow-Secret": "expected"},
+        ),
         None,
         repo=repo,
     )

@@ -56,11 +56,11 @@ def parse_json_body(raw: str | None) -> dict:
 
 def require_secret(headers: dict) -> None:
     """
-    Enforce the X-Workflow-Secret header for POST /workflow-failure.
+    Enforce the X-Workflow-Secret header for protected routes.
 
     Why:
-    - Prevent random users from creating tickets.
-    - Matches your intended contract.
+    - Prevent random users from creating or changing tickets.
+    - Matches the intended contract.
 
     Note:
     - We treat empty WORKFLOW_SECRET as misconfigured and reject (more secure).
@@ -68,7 +68,7 @@ def require_secret(headers: dict) -> None:
     expected = os.getenv("WORKFLOW_SECRET", "")
     provided = ""
 
-    # Headers can come in different casing; we check case-insensitively.
+    # Headers (case-insensitive check).
     for k, v in (headers or {}).items():
         if str(k).lower() == "x-workflow-secret":
             provided = str(v)
@@ -184,6 +184,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             open_ticket["runId"] = payload["runId"]
             open_ticket["runUrl"] = payload["runUrl"]
             repo_obj.upsert(open_ticket)
+
+            print(json.dumps({"ingest_result": {"action": "updated", "id": open_ticket["id"]}}))
+
             updated += 1
             continue
 
@@ -198,6 +201,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             existing["runId"] = payload["runId"]
             existing["runUrl"] = payload["runUrl"]
             repo_obj.upsert(existing)
+
+            print(json.dumps({"ingest_result": {"action": "reopened", "id": existing["id"]}}))
+
             reopened += 1
             continue
 
@@ -222,6 +228,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             "resolvedAt": None,
         }
         repo_obj.upsert(ticket)
+
+        print(json.dumps({"ingest_result": {"action": "created", "id": ticket["id"]}}))
+
         created += 1
 
     return {"ok": True, "created": created, "updated": updated, "reopened": reopened}
@@ -238,11 +247,13 @@ def list_todos(repo_obj, status: str | None) -> dict:
     return {"items": repo_obj.list_tickets(status=status)}
 
 
-def patch_todo_status(repo_obj, ticket_id: str, payload: dict) -> dict:
+def patch_todo_status(repo_obj, headers: dict, ticket_id: str, payload: dict) -> dict:
     """
     Implements PATCH /todos/{id}
     Body: {"status":"open"|"done"}
     """
+    require_secret(headers)
+
     status = payload.get("status")
     if status not in ("open", "done"):
         raise ServiceError("VALIDATION_ERROR", "Invalid status", ["status must be open|done"])

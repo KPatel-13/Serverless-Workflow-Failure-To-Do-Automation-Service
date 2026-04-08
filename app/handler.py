@@ -128,7 +128,7 @@ def lambda_handler(event: dict, context: Any, repo=None) -> dict:
         if method == "PATCH" and path.startswith("/todos/"):
             ticket_id = path.split("/todos/", 1)[1]
             payload = parse_json_body(event.get("body"))
-            out = patch_todo_status(repo, ticket_id, payload)
+            out = patch_todo_status(repo, headers, ticket_id, payload)
             logger.info(
                 json.dumps(
                     {
