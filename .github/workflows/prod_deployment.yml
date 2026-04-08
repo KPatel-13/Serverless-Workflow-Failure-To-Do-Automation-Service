@@ -73,7 +73,7 @@ jobs:
       # - That keeps production state isolated from dev.
       - name: Terraform init
         working-directory: infra/terraform
-        run: terraform init -input=false -backend-config="env/prod.backend.hcl"
+        run: terraform init -input=false -backend-config="env/prod-backend.hcl"
 
       - name: Terraform plan
         working-directory: infra/terraform
