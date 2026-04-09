@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Serverless Workflow Failure To-Do Automation Service</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="top-bar__title">
+        Serverless Workflow Failure To-Do Automation Service
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="view-switcher">
+        <button id="openViewButton" class="tab-button active" type="button">
+          Open Items
+        </button>
+        <button id="closedViewButton" class="tab-button" type="button">
+          Closed Items
+        </button>
+      </section>
+
+      <section class="board-header">
+        <div class="board-state-tabs">
+          <div class="state-tab">To Do</div>
+          <div class="state-tab">In Progress</div>
+          <div class="state-tab">Done</div>
+        </div>
+
+        <div class="board-actions">
+          <button id="refreshButton" class="action-button" type="button">
+            Refresh
+          </button>
+        </div>
+      </section>
+
+      <section id="statusMessage" class="status-message">
+        Ready.
+      </section>
+
+      <section class="board-wrapper">
+        <div class="board-column">
+          <div class="board-column__title" id="columnTitle">Open Tickets</div>
+          <div id="ticketBoard" class="ticket-board"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
