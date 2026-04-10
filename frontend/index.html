@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Serverless Workflow Failure To-Do Automation Service</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -14,12 +15,17 @@
     </header>
 
     <main class="page">
-      <section class="view-switcher">
-        <button id="openViewButton" class="tab-button active" type="button">
-          Open Items
-        </button>
-        <button id="closedViewButton" class="tab-button" type="button">
-          Closed Items
+      <section class="top-controls">
+        <div class="view-dropdown">
+          <label for="viewSelect" class="view-dropdown__label">View</label>
+          <select id="viewSelect" class="view-dropdown__select">
+            <option value="open">Open Items</option>
+            <option value="done">Closed Items</option>
+          </select>
+        </div>
+
+        <button id="refreshButton" class="action-button" type="button">
+          Refresh
         </button>
       </section>
 
@@ -29,12 +35,6 @@
           <div class="state-tab">In Progress</div>
           <div class="state-tab">Done</div>
         </div>
-
-        <div class="board-actions">
-          <button id="refreshButton" class="action-button" type="button">
-            Refresh
-          </button>
-        </div>
       </section>
 
       <section id="statusMessage" class="status-message">
@@ -43,11 +43,28 @@
 
       <section class="board-wrapper">
         <div class="board-column">
-          <div class="board-column__title" id="columnTitle">Open Tickets</div>
+          <div class="board-column__title-row">
+            <div class="board-column__title" id="columnTitle">Open Tickets</div>
+            <div class="board-column__count" id="ticketCountBadge">0</div>
+          </div>
+
           <div id="ticketBoard" class="ticket-board"></div>
         </div>
       </section>
     </main>
+
+    <div id="detailModal" class="modal hidden">
+      <div class="modal__backdrop" id="modalBackdrop"></div>
+      <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal__header">
+          <h2 id="modalTitle" class="modal__title">Ticket details</h2>
+          <button id="closeModalButton" class="modal__close-button" type="button">
+            Close
+          </button>
+        </div>
+        <div id="modalContent" class="modal__content"></div>
+      </div>
+    </div>
 
     <script src="./app.js"></script>
   </body>
