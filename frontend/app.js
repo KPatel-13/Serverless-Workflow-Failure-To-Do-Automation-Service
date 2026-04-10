@@ -1,357 +1,244 @@
 const API_BASE_URL = "__WORKFLOW_ENDPOINT__";
 
 const elements = {
-  viewSelect: document.getElementById("viewSelect"),
-  refreshButton: document.getElementById("refreshButton"),
-  statusMessage: document.getElementById("statusMessage"),
-  ticketBoard: document.getElementById("ticketBoard"),
-  columnTitle: document.getElementById("columnTitle"),
-  ticketCountBadge: document.getElementById("ticketCountBadge"),
-  detailModal: document.getElementById("detailModal"),
-  modalBackdrop: document.getElementById("modalBackdrop"),
-  closeModalButton: document.getElementById("closeModalButton"),
-  modalContent: document.getElementById("modalContent"),
+    todoTasks: document.getElementById("todo-tasks"),
+    inprogressTasks: document.getElementById("inprogress-tasks"),
+    doneTasks: document.getElementById("done-tasks"),
+    todoCount: document.getElementById("todo-count"),
+    inprogressCount: document.getElementById("inprogress-count"),
+    doneCount: document.getElementById("done-count"),
+    refreshButton: document.getElementById("refreshButton"),
+    statusMessage: document.getElementById("statusMessage"),
+    detailModal: document.getElementById("detailModal"),
+    modalContent: document.getElementById("modalContent"),
+    closeModalButton: document.getElementById("closeModalButton"),
+    modalBackdrop: document.getElementById("modalBackdrop")
 };
 
-let currentView = "open";
-let cachedClosedTickets = [];
-
-function getApiBaseUrl() {
-  return API_BASE_URL.trim().replace(/\/$/, "");
+function setStatus(msg) {
+    elements.statusMessage.textContent = msg;
 }
 
-function setStatusMessage(message) {
-  elements.statusMessage.textContent = message;
+function getApiBaseUrl() {
+    return API_BASE_URL.replace(/\/$/, "");
 }
 
 function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
 }
 
 function formatDate(value) {
-  if (!value) {
-    return "N/A";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
-}
-
-function normaliseOpenStatus(ticket) {
-  const rawStatus = String(ticket.status || "").toLowerCase();
-
-  if (rawStatus === "in progress" || rawStatus === "in_progress") {
-    return "in progress";
-  }
-
-  return "to-do";
-}
-
-function renderEmptyState() {
-  const message =
-    currentView === "open" ? "No open tickets found." : "No closed tickets found.";
-
-  elements.ticketCountBadge.textContent = "0";
-  elements.ticketBoard.innerHTML = `<div class="empty-state">${message}</div>`;
-}
-
-function renderOpenTickets(tickets) {
-  elements.ticketCountBadge.textContent = String(tickets.length);
-
-  if (!Array.isArray(tickets) || tickets.length === 0) {
-    renderEmptyState();
-    return;
-  }
-
-  elements.ticketBoard.innerHTML = tickets
-    .map((ticket) => {
-      const ticketId = ticket.id || "";
-      const title = ticket.summary || ticket.title || "Untitled ticket";
-      const repo = ticket.repo || "N/A";
-      const workflowName = ticket.workflowName || "N/A";
-      const jobName = ticket.jobName || "N/A";
-      const occurrenceCount = ticket.occurrenceCount ?? "N/A";
-      const lastSeenAt = formatDate(ticket.lastSeenAt);
-      const displayStatus = normaliseOpenStatus(ticket);
-
-      return `
-        <article class="ticket-card ticket-card--open">
-          <div class="ticket-card__main">
-            <h2 class="ticket-card__title">${escapeHtml(title)}</h2>
-
-            <div class="ticket-card__meta">
-              <div><span class="ticket-card__label">Repository:</span>${escapeHtml(repo)}</div>
-              <div><span class="ticket-card__label">Workflow:</span>${escapeHtml(workflowName)}</div>
-              <div><span class="ticket-card__label">Job:</span>${escapeHtml(jobName)}</div>
-              <div><span class="ticket-card__label">Occurrences:</span>${escapeHtml(String(occurrenceCount))}</div>
-              <div><span class="ticket-card__label">Last Seen:</span>${escapeHtml(lastSeenAt)}</div>
-            </div>
-          </div>
-
-          <div class="ticket-card__status-block">
-            <div class="ticket-card__status-pill">${escapeHtml(displayStatus)}</div>
-            <button
-              class="ticket-card__button"
-              type="button"
-              onclick="markTicketDone('${escapeHtml(ticketId)}')"
-            >
-              Done
-            </button>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderClosedTickets(tickets) {
-  cachedClosedTickets = tickets;
-  elements.ticketCountBadge.textContent = String(tickets.length);
-
-  if (!Array.isArray(tickets) || tickets.length === 0) {
-    renderEmptyState();
-    return;
-  }
-
-  elements.ticketBoard.innerHTML = tickets
-    .map((ticket, index) => {
-      const title = ticket.summary || ticket.title || "Untitled ticket";
-      const details = ticket.details || "No further details available.";
-      const repo = ticket.repo || "N/A";
-      const workflowName = ticket.workflowName || "N/A";
-      const lastSeenAt = formatDate(ticket.lastSeenAt);
-
-      return `
-        <article
-          class="ticket-card ticket-card--closed"
-          role="button"
-          tabindex="0"
-          onclick="openClosedTicketDetail(${index})"
-          onkeydown="handleClosedCardKeydown(event, ${index})"
-        >
-          <div class="ticket-card__main">
-            <h2 class="ticket-card__title">${escapeHtml(title)}</h2>
-            <p class="ticket-card__summary">${escapeHtml(details)}</p>
-
-            <div class="ticket-card__meta">
-              <div><span class="ticket-card__label">Repository:</span>${escapeHtml(repo)}</div>
-              <div><span class="ticket-card__label">Workflow:</span>${escapeHtml(workflowName)}</div>
-              <div><span class="ticket-card__label">Closed Status:</span>done</div>
-              <div><span class="ticket-card__label">Last Seen:</span>${escapeHtml(lastSeenAt)}</div>
-            </div>
-
-            <div class="ticket-card__hint">Click to view more details.</div>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderTickets(tickets) {
-  if (currentView === "open") {
-    renderOpenTickets(tickets);
-    return;
-  }
-
-  renderClosedTickets(tickets);
-}
-
-async function fetchTickets() {
-  const apiBaseUrl = getApiBaseUrl();
-
-  if (!apiBaseUrl || apiBaseUrl === "__WORKFLOW_ENDPOINT__") {
-    setStatusMessage("Missing API base URL injection for frontend build.");
-    renderEmptyState();
-    return;
-  }
-
-  elements.columnTitle.textContent =
-    currentView === "open" ? "Open Tickets" : "Closed Tickets";
-
-  setStatusMessage(
-    currentView === "open"
-      ? "Loading open tickets..."
-      : "Loading closed tickets..."
-  );
-
-  try {
-    const response = await fetch(
-      `${apiBaseUrl}/todos?status=${encodeURIComponent(currentView)}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`GET /todos failed with status ${response.status}`);
+    if (!value) {
+        return "N/A";
     }
 
-    const payload = await response.json();
-    const tickets = Array.isArray(payload) ? payload : payload.items || [];
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
 
-    renderTickets(tickets);
-
-    setStatusMessage(
-      currentView === "open"
-        ? "Open tickets loaded successfully."
-        : "Closed tickets loaded successfully."
-    );
-  } catch (error) {
-    console.error("Failed to fetch tickets:", error);
-    setStatusMessage(
-      `Unable to load tickets. Check browser console. ${error.message}`
-    );
-    renderEmptyState();
-  }
+    return date.toLocaleString();
 }
 
-async function markTicketDone(ticketId) {
-  const apiBaseUrl = getApiBaseUrl();
+// --- Drag and Drop ---
+window.allowDrop = (event) => {
+    event.preventDefault();
+};
 
-  if (!ticketId) {
-    setStatusMessage("Missing ticket id.");
-    return;
-  }
+window.drag = (event) => {
+    event.dataTransfer.setData("text/plain", event.currentTarget.id);
+};
 
-  if (!apiBaseUrl || apiBaseUrl === "__WORKFLOW_ENDPOINT__") {
-    setStatusMessage("Missing API base URL injection for frontend build.");
-    return;
-  }
+window.drop = async (event, newColumn) => {
+    event.preventDefault();
 
-  setStatusMessage(`Marking ticket ${ticketId} as done...`);
+    const ticketId = event.dataTransfer.getData("text/plain");
+    if (!ticketId) {
+        return;
+    }
 
-  try {
-    const response = await fetch(`${apiBaseUrl}/todos/${encodeURIComponent(ticketId)}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status: "done" }),
+    if (newColumn === "done") {
+        await updateTicketOnServer(ticketId, {
+            status: "done"
+        });
+        return;
+    }
+
+    const workflowState = newColumn === "in-progress" ? "in_progress" : "todo";
+
+    await updateTicketOnServer(ticketId, {
+        status: "open",
+        workflowState
+    });
+};
+
+// --- API Calls ---
+async function fetchTickets() {
+    const apiBaseUrl = getApiBaseUrl();
+
+    if (!apiBaseUrl || apiBaseUrl === "__WORKFLOW_ENDPOINT__") {
+        setStatus("Missing API base URL injection for frontend build.");
+        return;
+    }
+
+    setStatus("Loading board...");
+
+    try {
+        const response = await fetch(`${apiBaseUrl}/todos`);
+
+        if (!response.ok) {
+            throw new Error(`GET /todos failed with status ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const tickets = Array.isArray(payload) ? payload : payload.items || [];
+
+        renderBoard(tickets);
+        setStatus("Board up to date.");
+    } catch (error) {
+        console.error("Failed to fetch tickets:", error);
+        setStatus(`Error loading tickets. ${error.message}`);
+    }
+}
+
+async function updateTicketOnServer(id, patchBody) {
+    const apiBaseUrl = getApiBaseUrl();
+
+    if (!apiBaseUrl || apiBaseUrl === "__WORKFLOW_ENDPOINT__") {
+        setStatus("Missing API base URL injection for frontend build.");
+        return;
+    }
+
+    setStatus(`Updating ${id}...`);
+
+    try {
+        const response = await fetch(
+            `${apiBaseUrl}/todos/${encodeURIComponent(id)}`,
+            {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(patchBody)
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`PATCH /todos/{id} failed with status ${response.status}`);
+        }
+
+        setStatus("Saved.");
+        await fetchTickets();
+    } catch (error) {
+        console.error("Failed to update ticket:", error);
+        setStatus(`Failed to save move. ${error.message}`);
+    }
+}
+
+// --- Rendering ---
+function renderBoard(tickets) {
+    elements.todoTasks.innerHTML = "";
+    elements.inprogressTasks.innerHTML = "";
+    elements.doneTasks.innerHTML = "";
+
+    const counts = {
+        todo: 0,
+        in_progress: 0,
+        done: 0
+    };
+
+    tickets.forEach((ticket) => {
+        const lifecycleStatus = String(ticket.status || "open").toLowerCase();
+        const workflowState = String(ticket.workflowState || "todo").toLowerCase();
+
+        const card = document.createElement("article");
+        card.className = "task";
+        card.id = ticket.id;
+        card.draggable = true;
+        card.addEventListener("dragstart", window.drag);
+        card.addEventListener("click", () => openModal(ticket));
+
+        const summary = escapeHtml(ticket.summary || ticket.title || "Untitled ticket");
+        const repo = escapeHtml(ticket.repo || "No Repo");
+        const badgeText =
+            lifecycleStatus === "done"
+                ? "Closed"
+                : workflowState === "in_progress"
+                ? "In Progress"
+                : "To Do";
+
+        card.innerHTML = `
+            <div class="task__top-row">
+                <h3 class="ticket-card__title">${summary}</h3>
+                <span class="task__badge">${badgeText}</span>
+            </div>
+            <small class="task__repo">${repo}</small>
+        `;
+
+        if (lifecycleStatus === "done") {
+            elements.doneTasks.appendChild(card);
+            counts.done += 1;
+            return;
+        }
+
+        if (workflowState === "in_progress") {
+            elements.inprogressTasks.appendChild(card);
+            counts.in_progress += 1;
+            return;
+        }
+
+        elements.todoTasks.appendChild(card);
+        counts.todo += 1;
     });
 
-    if (!response.ok) {
-      throw new Error(`PATCH /todos/{id} failed with status ${response.status}`);
-    }
-
-    setStatusMessage(`Ticket ${ticketId} marked as done.`);
-    await fetchTickets();
-  } catch (error) {
-    console.error("Failed to update ticket:", error);
-    setStatusMessage(
-      `Unable to mark ticket done. Check browser console and API logs. ${error.message}`
-    );
-  }
+    elements.todoCount.textContent = String(counts.todo);
+    elements.inprogressCount.textContent = String(counts.in_progress);
+    elements.doneCount.textContent = String(counts.done);
 }
 
-function openClosedTicketDetail(index) {
-  const ticket = cachedClosedTickets[index];
+// --- Modal ---
+function openModal(ticket) {
+    const runUrl = ticket.runUrl
+        ? `<a href="${escapeHtml(ticket.runUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(ticket.runUrl)}</a>`
+        : "N/A";
 
-  if (!ticket) {
-    return;
-  }
+    elements.modalContent.innerHTML = `
+        <p><strong>Summary:</strong> ${escapeHtml(ticket.summary || ticket.title || "Untitled ticket")}</p>
+        <p><strong>Repository:</strong> ${escapeHtml(ticket.repo || "N/A")}</p>
+        <p><strong>Workflow:</strong> ${escapeHtml(ticket.workflowName || "N/A")}</p>
+        <p><strong>Job:</strong> ${escapeHtml(ticket.jobName || "N/A")}</p>
+        <p><strong>Status:</strong> ${escapeHtml(ticket.status || "N/A")}</p>
+        <p><strong>Board State:</strong> ${escapeHtml(ticket.workflowState || "todo")}</p>
+        <p><strong>Occurrences:</strong> ${escapeHtml(ticket.occurrenceCount ?? "N/A")}</p>
+        <p><strong>Last Seen:</strong> ${escapeHtml(formatDate(ticket.lastSeenAt))}</p>
+        <p><strong>Details:</strong> ${escapeHtml(ticket.details || "N/A")}</p>
+        <p><strong>Run URL:</strong> ${runUrl}</p>
+    `;
 
-  const runUrl = ticket.runUrl || "";
-  const details = ticket.details || "No further details available.";
-
-  elements.modalContent.innerHTML = `
-    <div class="modal__row">
-      <span class="modal__row-label">Summary</span>
-      <div class="modal__row-value">${escapeHtml(ticket.summary || ticket.title || "Untitled ticket")}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Details</span>
-      <div class="modal__row-value">${escapeHtml(details)}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Repository</span>
-      <div class="modal__row-value">${escapeHtml(ticket.repo || "N/A")}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Workflow</span>
-      <div class="modal__row-value">${escapeHtml(ticket.workflowName || "N/A")}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Job</span>
-      <div class="modal__row-value">${escapeHtml(ticket.jobName || "N/A")}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Severity</span>
-      <div class="modal__row-value">${escapeHtml(ticket.severity || "N/A")}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Occurrences</span>
-      <div class="modal__row-value">${escapeHtml(String(ticket.occurrenceCount ?? "N/A"))}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Last Seen</span>
-      <div class="modal__row-value">${escapeHtml(formatDate(ticket.lastSeenAt))}</div>
-    </div>
-
-    <div class="modal__row">
-      <span class="modal__row-label">Run URL</span>
-      <div class="modal__row-value">
-        ${
-          runUrl
-            ? `<a class="modal__link" href="${escapeHtml(runUrl)}" target="_blank" rel="noopener noreferrer">Open workflow run</a>`
-            : "N/A"
-        }
-      </div>
-    </div>
-  `;
-
-  elements.detailModal.classList.remove("hidden");
+    elements.detailModal.classList.remove("hidden");
 }
 
 function closeModal() {
-  elements.detailModal.classList.add("hidden");
-}
-
-function handleClosedCardKeydown(event, index) {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    openClosedTicketDetail(index);
-  }
-}
-
-function registerEventListeners() {
-  elements.viewSelect.addEventListener("change", (event) => {
-    currentView = event.target.value;
-    fetchTickets();
-  });
-
-  elements.refreshButton.addEventListener("click", fetchTickets);
-  elements.closeModalButton.addEventListener("click", closeModal);
-  elements.modalBackdrop.addEventListener("click", closeModal);
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      closeModal();
-    }
-  });
+    elements.detailModal.classList.add("hidden");
 }
 
 function init() {
-  registerEventListeners();
-  fetchTickets();
-}
+    elements.refreshButton.onclick = fetchTickets;
+    elements.closeModalButton.onclick = closeModal;
+    elements.modalBackdrop.onclick = closeModal;
 
-window.markTicketDone = markTicketDone;
-window.openClosedTicketDetail = openClosedTicketDetail;
-window.handleClosedCardKeydown = handleClosedCardKeydown;
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeModal();
+        }
+    });
+
+    fetchTickets();
+}
 
 init();
