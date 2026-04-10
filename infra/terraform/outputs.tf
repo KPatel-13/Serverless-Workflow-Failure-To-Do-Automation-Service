@@ -33,3 +33,7 @@ output "frontend_bucket_name" {
 output "frontend_cloudfront_domain_name" {
   value = module.frontend_infra.frontend_cloudfront_domain_name
 }
+
+output "frontend_cloudfront_distribution_id" {
+  value = module.frontend_infra.frontend_cloudfront_distribution_id
+}
