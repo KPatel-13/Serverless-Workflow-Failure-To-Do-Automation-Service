@@ -1,7 +1,5 @@
 const API_BASE_URL = "__API_BASE_URL__";
 
-console.log("DEBUG raw API_BASE_URL:", API_BASE_URL);
-
 const elements = {
     todoColumn: document.getElementById("todo-column"),
     inProgressColumn: document.getElementById("in-progress-column"),

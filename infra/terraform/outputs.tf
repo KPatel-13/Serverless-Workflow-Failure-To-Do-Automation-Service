@@ -25,3 +25,11 @@ output "http_api_endpoint" {
   description = "Base URL for the HTTP API"
   value       = aws_apigatewayv2_api.api.api_endpoint
 }
+
+output "frontend_bucket_name" {
+  value = module.frontend_infra.frontend_bucket_name
+}
+
+output "frontend_cloudfront_domain_name" {
+  value = module.frontend_infra.frontend_cloudfront_domain_name
+}

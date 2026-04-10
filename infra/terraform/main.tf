@@ -5,3 +5,10 @@
 # - lambda.tf
 # - apigw.tf
 # - outputs.tf
+
+module "frontend_infra" {
+  source = "./frontend_infra"
+
+  project_name = var.project_name
+  environment  = var.environment
+}
