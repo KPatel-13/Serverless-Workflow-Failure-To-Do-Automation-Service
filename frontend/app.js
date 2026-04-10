@@ -1,4 +1,4 @@
-const API_BASE_URL = "";
+const API_BASE_URL = "__API_BASE_URL__";
 
 console.log("DEBUG raw API_BASE_URL:", API_BASE_URL);
 
