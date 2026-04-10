@@ -305,7 +305,6 @@ def patch_todo_status(repo_obj, headers: dict, ticket_id: str, payload: dict) ->
     - {"status": "open", "workflowState": "in_progress"}
 
     """
-    require_secret(headers)
 
     status = payload.get("status")
     workflow_state = payload.get("workflowState")
