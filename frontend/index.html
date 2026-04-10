@@ -17,13 +17,23 @@
 
     <main class="page">
         <section class="top-controls">
-            <button id="refreshButton" class="action-button" type="button">Refresh Board</button>
-            <section id="statusMessage" class="status-message">Ready.</section>
+            <div class="top-controls__left">
+                <button id="refreshButton" class="action-button" type="button">Refresh Board</button>
+            </div>
+
+            <div class="top-controls__right">
+                <label for="viewSelect" class="view-label">View</label>
+                <select id="viewSelect" class="view-select">
+                    <option value="open">Open Tickets</option>
+                    <option value="closed">Closed Tickets</option>
+                </select>
+            </div>
         </section>
 
+        <section id="statusMessage" class="status-message">Ready.</section>
+
         <div class="board">
-            
-            <div class="column" id="todo" ondrop="drop(event, 'todo')" ondragover="allowDrop(event)">
+            <div class="column" id="todo-column" ondrop="drop(event, 'todo')" ondragover="allowDrop(event)">
                 <div class="column-header">
                     <h2>To Do <span class="count-badge" id="todo-count">0</span></h2>
                 </div>
@@ -31,7 +41,7 @@
                 <div class="task-container" id="todo-tasks"></div>
             </div>
 
-            <div class="column" id="in-progress" ondrop="drop(event, 'in-progress')" ondragover="allowDrop(event)">
+            <div class="column" id="in-progress-column" ondrop="drop(event, 'in-progress')" ondragover="allowDrop(event)">
                 <div class="column-header">
                     <h2>In Progress <span class="count-badge" id="inprogress-count">0</span></h2>
                 </div>
@@ -39,14 +49,13 @@
                 <div class="task-container" id="inprogress-tasks"></div>
             </div>
 
-            <div class="column" id="done" ondrop="drop(event, 'done')" ondragover="allowDrop(event)">
+            <div class="column" id="done-column" ondrop="drop(event, 'done')" ondragover="allowDrop(event)">
                 <div class="column-header">
-                    <h2>Done <span class="count-badge" id="done-count">0</span></h2>
+                    <h2>Closed <span class="count-badge" id="done-count">0</span></h2>
                 </div>
                 <hr>
                 <div class="task-container" id="done-tasks"></div>
             </div>
-
         </div>
     </main>
 
