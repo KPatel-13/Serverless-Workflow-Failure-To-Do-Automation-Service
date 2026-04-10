@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Serverless Workflow Failure To-Do Automation Service</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+    <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar__title">
+            Serverless Workflow Failure To-Do Automation Service
+        </div>
+    </header>
+
+    <main class="page">
+        <section class="top-controls">
+            <div class="top-controls__left">
+                <button id="refreshButton" class="action-button" type="button">Refresh Board</button>
+            </div>
+
+            <div class="top-controls__right">
+                <label for="viewSelect" class="view-label">View</label>
+                <select id="viewSelect" class="view-select">
+                    <option value="open">Open Tickets</option>
+                    <option value="closed">Closed Tickets</option>
+                </select>
+            </div>
+        </section>
+
+        <section id="statusMessage" class="status-message">Ready.</section>
+
+        <div class="board">
+            <div class="column" id="todo-column" ondrop="drop(event, 'todo')" ondragover="allowDrop(event)">
+                <div class="column-header">
+                    <h2>To Do <span class="count-badge" id="todo-count">0</span></h2>
+                </div>
+                <hr>
+                <div class="task-container" id="todo-tasks"></div>
+            </div>
+
+            <div class="column" id="in-progress-column" ondrop="drop(event, 'in-progress')" ondragover="allowDrop(event)">
+                <div class="column-header">
+                    <h2>In Progress <span class="count-badge" id="inprogress-count">0</span></h2>
+                </div>
+                <hr>
+                <div class="task-container" id="inprogress-tasks"></div>
+            </div>
+
+            <div class="column" id="done-column" ondrop="drop(event, 'done')" ondragover="allowDrop(event)">
+                <div class="column-header">
+                    <h2>Closed <span class="count-badge" id="done-count">0</span></h2>
+                </div>
+                <hr>
+                <div class="task-container" id="done-tasks"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="detailModal" class="modal hidden">
+        <div class="modal__backdrop" id="modalBackdrop"></div>
+        <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <div class="modal__header">
+                <h2 id="modalTitle" class="modal__title">Ticket Details</h2>
+                <button id="closeModalButton" class="modal__close-button" type="button">Close</button>
+            </div>
+            <div id="modalContent" class="modal__content"></div>
+        </div>
+    </div>
+
+    <script src="./app.js"></script>
+</body>
+</html>
