@@ -5,3 +5,7 @@ output "frontend_bucket_name" {
 output "frontend_cloudfront_domain_name" {
   value = aws_cloudfront_distribution.frontend.domain_name
 }
+
+output "frontend_cloudfront_distribution_id" {
+  value = aws_cloudfront_distribution.frontend.id
+}

@@ -86,3 +86,20 @@ jobs:
       - name: Show outputs
         working-directory: infra/terraform
         run: terraform output
+
+      - name: Capture frontend bucket name
+        working-directory: infra/terraform
+        run: echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_ENV
+
+      - name: Capture CloudFront distribution id
+        working-directory: infra/terraform
+        run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> $GITHUB_ENV
+
+      - name: Upload frontend files to S3
+        run: aws s3 sync ./frontend s3://$FRONTEND_BUCKET/frontend --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$FRONTEND_CF_DISTRIBUTION_ID" \
+            --paths "/frontend/*"
