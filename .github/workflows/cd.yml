@@ -107,13 +107,17 @@ jobs:
           content = path.read_text(encoding="utf-8")
 
           placeholder = "__API_BASE_URL__"
-          value = os.environ["FRONTEND_API_BASE_URL"].strip()
+          value = os.environ["FRONTEND_API_BASE_URL"].strip().rstrip("/")
 
           if placeholder not in content:
               raise SystemExit("Missing __API_BASE_URL__ placeholder in frontend/app.js")
 
           if not value:
               raise SystemExit("WORKFLOW_ENDPOINT secret is empty")
+
+          # Frontend needs the API root, not the workflow ingestion route.
+          if value.endswith("/workflow-failure"):
+              value = value[: -len("/workflow-failure")]
 
           content = content.replace(placeholder, value)
           path.write_text(content, encoding="utf-8")
