@@ -49,7 +49,7 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 }
 
 resource "aws_cloudfront_distribution" "frontend" {
-  enabled             = true
+  enabled             = false
   is_ipv6_enabled     = true
   comment             = "${var.project_name}-${var.environment} frontend"
   default_root_object = "frontend/index.html"
