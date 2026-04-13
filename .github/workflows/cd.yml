@@ -6,11 +6,6 @@ name: CD Deploy
 
 on:
   push:
-    branches:
-      - main
-      - feature/**
-      - bugfix/**
-      - hotfix/**
   workflow_dispatch:
 
 permissions:
