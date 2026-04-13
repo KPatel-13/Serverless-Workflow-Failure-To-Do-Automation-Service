@@ -29,9 +29,6 @@ def api_event(method, path, body=None, headers=None, query=None):
 
 def test_get_repo_returns_local_repository_when_no_todos_table(monkeypatch):
     """
-    Sprint 3 wiring test.
-
-    Why:
     - Confirms local runs still use LocalRepository when TODOS_TABLE is not set.
     - Keeps unit tests AWS-free.
     """
@@ -180,3 +177,173 @@ def test_get_todos_empty(repo):
     res = lambda_handler(api_event("GET", "/todos"), None, repo=repo)
     assert res["statusCode"] == 200
     assert json.loads(res["body"]) == {"items": []}
+
+
+def test_patch_open_to_in_progress(repo, monkeypatch):
+    monkeypatch.setenv("WORKFLOW_SECRET", "expected")
+
+    body = {
+        "repo": "owner/repo",
+        "workflowName": "CI",
+        "runId": "1",
+        "runUrl": "https://example/run/1",
+        "failures": [{"jobName": "build", "summary": "failed"}],
+    }
+
+    lambda_handler(
+        api_event(
+            "POST",
+            "/workflow-failure",
+            body=body,
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    fp = compute_fingerprint("owner/repo", "CI", "build", "failed", None)
+
+    res = lambda_handler(
+        api_event(
+            "PATCH",
+            f"/todos/{fp}",
+            body={"status": "open", "workflowState": "in_progress"},
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    ticket = json.loads(res["body"])
+    assert ticket["status"] == "open"
+    assert ticket["workflowState"] == "in_progress"
+    assert ticket["resolvedAt"] is None
+
+
+def test_repeat_failure_keeps_in_progress_and_increments_count(repo, monkeypatch):
+    monkeypatch.setenv("WORKFLOW_SECRET", "expected")
+
+    body = {
+        "repo": "owner/repo",
+        "workflowName": "CI",
+        "runId": "1",
+        "runUrl": "https://example/run/1",
+        "failures": [{"jobName": "build", "summary": "failed", "details": "x"}],
+    }
+
+    lambda_handler(
+        api_event(
+            "POST",
+            "/workflow-failure",
+            body=body,
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    fp = compute_fingerprint("owner/repo", "CI", "build", "failed", "x")
+
+    lambda_handler(
+        api_event(
+            "PATCH",
+            f"/todos/{fp}",
+            body={"status": "open", "workflowState": "in_progress"},
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    body["runId"] = "2"
+    body["runUrl"] = "https://example/run/2"
+
+    res = lambda_handler(
+        api_event(
+            "POST",
+            "/workflow-failure",
+            body=body,
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    assert res["statusCode"] == 202
+    assert json.loads(res["body"]) == {
+        "ok": True,
+        "created": 0,
+        "updated": 1,
+        "reopened": 0,
+    }
+
+    ticket = repo.get_by_id(fp)
+    assert ticket["status"] == "open"
+    assert ticket["workflowState"] == "in_progress"
+    assert ticket["occurrenceCount"] == 2
+    assert ticket["runId"] == "2"
+
+
+def test_repeat_failure_reopens_done_ticket_back_to_todo(repo, monkeypatch):
+    monkeypatch.setenv("WORKFLOW_SECRET", "expected")
+
+    body = {
+        "repo": "owner/repo",
+        "workflowName": "CI",
+        "runId": "1",
+        "runUrl": "https://example/run/1",
+        "failures": [{"jobName": "build", "summary": "failed", "details": "x"}],
+    }
+
+    lambda_handler(
+        api_event(
+            "POST",
+            "/workflow-failure",
+            body=body,
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    fp = compute_fingerprint("owner/repo", "CI", "build", "failed", "x")
+
+    lambda_handler(
+        api_event(
+            "PATCH",
+            f"/todos/{fp}",
+            body={"status": "done"},
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    body["runId"] = "2"
+    body["runUrl"] = "https://example/run/2"
+
+    res = lambda_handler(
+        api_event(
+            "POST",
+            "/workflow-failure",
+            body=body,
+            headers={"X-Workflow-Secret": "expected"},
+        ),
+        None,
+        repo=repo,
+    )
+
+    assert res["statusCode"] == 202
+    assert json.loads(res["body"]) == {
+        "ok": True,
+        "created": 0,
+        "updated": 0,
+        "reopened": 1,
+    }
+
+    ticket = repo.get_by_id(fp)
+    assert ticket["status"] == "open"
+    assert ticket["workflowState"] == "todo"
+    assert ticket["resolvedAt"] is None
+    assert ticket["occurrenceCount"] == 2
+    assert ticket["runId"] == "2"

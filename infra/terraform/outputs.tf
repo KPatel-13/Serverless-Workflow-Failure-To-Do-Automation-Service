@@ -37,3 +37,8 @@ output "frontend_cloudfront_domain_name" {
 output "frontend_cloudfront_distribution_id" {
   value = module.frontend_infra.frontend_cloudfront_distribution_id
 }
+
+output "frontend_cloudfront_domain_name" {
+  description = "CloudFront domain name for the hosted frontend"
+  value       = aws_cloudfront_distribution.frontend.domain_name
+}

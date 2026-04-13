@@ -1,5 +1,5 @@
-# Manually promotes a known-good tagged version to production.
-# The selected tag should point to a commit already proven in dev.
+# Manually promotes the current main commit to production.
+# The workflow creates the Git tag in GitHub, then deploys prod from that exact tag.
 
 name: Promote to Prod
 
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Git tag to promote to prod (example: v1.0.0)"
+        description: "Release tag to create and promote to prod (example: v1.2.0)"
         required: true
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 # Prevent two production deployments from running at the same time.
 concurrency:
@@ -21,15 +21,44 @@ concurrency:
 
 jobs:
   deploy-prod:
-    name: Deploy tagged release to prod
+    name: Tag and deploy release to prod
     runs-on: ubuntu-latest
     environment: prod
 
     steps:
-      - name: Checkout selected tag
+      - name: Checkout main
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.release_tag }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release tag format
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must look like v1.2.3"
+            exit 1
+          fi
+
+      - name: Check tag does not already exist
+        run: |
+          git fetch --tags --force
+          if git rev-parse "refs/tags/${{ inputs.release_tag }}" >/dev/null 2>&1; then
+            echo "Tag '${{ inputs.release_tag }}' already exists."
+            exit 1
+          fi
+
+      - name: Create and push release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${{ inputs.release_tag }}" -m "Production release ${{ inputs.release_tag }}"
+          git push origin "${{ inputs.release_tag }}"
+
+      - name: Checkout selected tag
+        run: |
+          git checkout "refs/tags/${{ inputs.release_tag }}"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -90,3 +119,48 @@ jobs:
       - name: Show outputs
         working-directory: infra/terraform
         run: terraform output
+
+      - name: Capture API endpoint
+        working-directory: infra/terraform
+        run: echo "HTTP_API_ENDPOINT=$(terraform output -raw http_api_endpoint)" >> $GITHUB_ENV
+
+      - name: Capture frontend bucket name
+        working-directory: infra/terraform
+        run: echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_ENV
+
+      - name: Capture CloudFront distribution id
+        working-directory: infra/terraform
+        run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> $GITHUB_ENV
+
+      - name: Inject frontend API base URL
+        env:
+          FRONTEND_API_BASE_URL: ${{ env.HTTP_API_ENDPOINT }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("frontend/app.js")
+          content = path.read_text(encoding="utf-8")
+
+          placeholder = "__API_BASE_URL__"
+          value = os.environ["FRONTEND_API_BASE_URL"].strip().rstrip("/")
+
+          if placeholder not in content:
+              raise SystemExit("Missing __API_BASE_URL__ placeholder in frontend/app.js")
+
+          if not value:
+              raise SystemExit("HTTP_API_ENDPOINT is empty")
+
+          content = content.replace(placeholder, value)
+          path.write_text(content, encoding="utf-8")
+          PY
+
+      - name: Upload frontend files to S3
+        run: aws s3 sync ./frontend s3://$FRONTEND_BUCKET/frontend --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$FRONTEND_CF_DISTRIBUTION_ID" \
+            --paths "/frontend/*"
