@@ -1,6 +1,5 @@
 # Deploys the application to the dev environment.
-# Runs on pushes to main and active development branches.
-# Also supports manual runs from the Actions tab.
+# Runs on every push and also supports manual runs from the Actions tab.
 
 name: CD Deploy
 
@@ -63,9 +62,6 @@ jobs:
       - name: Verify AWS caller identity
         run: aws sts get-caller-identity
 
-      # Important:
-      # - This uses the shared remote backend for dev state.
-      # - That lets GitHub Actions and local Terraform use the same state.
       - name: Terraform init
         working-directory: infra/terraform
         run: terraform init -input=false -backend-config="env/dev-backend.hcl"
@@ -122,6 +118,26 @@ jobs:
           path.write_text(content, encoding="utf-8")
           PY
 
+      - name: Verify injected frontend API base URL
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          content = Path("frontend/app.js").read_text(encoding="utf-8")
+          match = re.search(r'const API_BASE_URL = "(.*?)";', content)
+
+          if not match:
+              raise SystemExit("Could not find API_BASE_URL line after injection")
+
+          injected = match.group(1)
+
+          if injected == "__API_BASE_URL__":
+              raise SystemExit("API base URL placeholder is still present after injection")
+
+          print(f"Injected API base URL: {injected}")
+          PY
+
       - name: Upload frontend files to S3
         run: aws s3 sync ./frontend s3://$FRONTEND_BUCKET/frontend --delete
 
@@ -129,4 +145,4 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "$FRONTEND_CF_DISTRIBUTION_ID" \
-            --paths "/frontend/*"
+            --paths "/frontend" "/frontend/" "/frontend/*"
