@@ -12,7 +12,6 @@ from app.service import (
     patch_todo_status,
 )
 
-# Root logger used by Lambda -> CloudWatch Logs
 logger = logging.getLogger()
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
@@ -37,19 +36,29 @@ def get_repo():
     return LocalRepository()
 
 
+def _get_allowed_origin() -> str:
+    """
+    Frontend is now hosted separately, so stop hardcoding wildcard CORS.
+
+    In dev you can still leave FRONTEND_ORIGIN unset and fall back to '*',
+    but once your hosted frontend URL is stable this should be set in Lambda env.
+    """
+    return os.getenv("FRONTEND_ORIGIN", "*")
+
+
 def response(status_code: int, body: dict) -> dict:
     """
     Build a consistent HTTP API v2 Lambda proxy response.
 
     Why:
     - Keeps every route returning the same structure.
-    - Includes CORS headers so a later browser UI can call the API.
+    - Includes CORS headers so the browser frontend can call the API.
     """
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": _get_allowed_origin(),
             "Access-Control-Allow-Headers": "Content-Type,X-Workflow-Secret",
             "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
         },
@@ -59,11 +68,18 @@ def response(status_code: int, body: dict) -> dict:
 
 def error(status_code: int, code: str, message: str, details: Any = None) -> dict:
     """
-    Build the contract error shape:
-      { "error": { "code": "...", "message": "...", "details": ... } }
+    Build the contract error shape.
+
+    {
+      "error": {
+        "code": "...",
+        "message": "...",
+        "details": ...
+      }
+    }
 
     Why:
-    - Clients and the future UI can handle errors consistently.
+    - Clients and the UI can handle errors consistently.
     """
     err_obj = {"code": code, "message": message}
     if details is not None:
@@ -81,7 +97,7 @@ def lambda_handler(event: dict, context: Any, repo=None) -> dict:
     - repository classes own storage details
 
     repo=None is kept so:
-    - Tests can inject a local/fake repo directly
+    - tests can inject a local/fake repo directly
     - AWS runtime can auto-select DynamoDB via get_repo()
     """
     if repo is None:
@@ -135,6 +151,7 @@ def lambda_handler(event: dict, context: Any, repo=None) -> dict:
                         "msg": "todo_patched",
                         "ticket_id": ticket_id,
                         "status": out.get("status"),
+                        "workflowState": out.get("workflowState"),
                     }
                 )
             )

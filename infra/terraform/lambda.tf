@@ -104,6 +104,9 @@ resource "aws_lambda_function" "api" {
 
       # Basic structured logging level
       LOG_LEVEL = "INFO"
+
+      # Hosted frontend origin used for CORS
+      FRONTEND_ORIGIN = "https://${module.frontend_infra.frontend_cloudfront_domain_name}"
     }
   }
 

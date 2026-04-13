@@ -1,64 +1,76 @@
-# Manually promotes the current main commit to production.
-# The workflow creates the Git tag in GitHub, then deploys prod from that exact tag.
-
-name: Promote to Prod
+name: Prod Rollback
 
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Release tag to create and promote to prod (example: v1.2.0)"
-        required: true
+      release_tag_choice:
+        description: "Choose a common rollback tag"
+        required: false
+        type: choice
+        options:
+          - ""
+          - v1.0.0
+          - v1.0.1
+          - v1.1.0
+          - v1.1.1
+          - v1.2.0
+      release_tag_manual:
+        description: "Or type a specific tag, for example v1.2.3"
+        required: false
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
-# Prevent two production deployments from running at the same time.
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
 jobs:
-  deploy-prod:
-    name: Tag and deploy release to prod
+  rollback-prod:
+    name: Roll back prod to previous tag
     runs-on: ubuntu-latest
-    environment: prod
+    environment: prod-rollback
 
     steps:
-      - name: Checkout main
+      - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: main
           fetch-depth: 0
 
-      - name: Validate release tag format
+      - name: Resolve rollback tag
         run: |
-          TAG="${{ inputs.release_tag }}"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Tag must look like v1.2.3"
+          CHOICE="${{ inputs.release_tag_choice }}"
+          MANUAL="${{ inputs.release_tag_manual }}"
+
+          if [ -n "$MANUAL" ] && [ -n "$CHOICE" ]; then
+            echo "Use either release_tag_choice or release_tag_manual, not both."
             exit 1
           fi
 
-      - name: Check tag does not already exist
+          if [ -n "$MANUAL" ]; then
+            TAG="$MANUAL"
+          elif [ -n "$CHOICE" ]; then
+            TAG="$CHOICE"
+          else
+            echo "You must provide a rollback tag."
+            exit 1
+          fi
+
+          echo "ROLLBACK_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Validate release tag exists
         run: |
           git fetch --tags --force
-          if git rev-parse "refs/tags/${{ inputs.release_tag }}" >/dev/null 2>&1; then
-            echo "Tag '${{ inputs.release_tag }}' already exists."
+          if ! git rev-parse "refs/tags/$ROLLBACK_TAG" >/dev/null 2>&1; then
+            echo "Tag '$ROLLBACK_TAG' does not exist."
+            echo "Available recent tags:"
+            git tag --sort=-creatordate | head -n 20
             exit 1
           fi
 
-      - name: Create and push release tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -a "${{ inputs.release_tag }}" -m "Production release ${{ inputs.release_tag }}"
-          git push origin "${{ inputs.release_tag }}"
-
-      - name: Checkout selected tag
-        run: |
-          git checkout "refs/tags/${{ inputs.release_tag }}"
+      - name: Checkout selected release tag
+        run: git checkout "refs/tags/$ROLLBACK_TAG"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -97,9 +109,6 @@ jobs:
       - name: Verify AWS caller identity
         run: aws sts get-caller-identity
 
-      # Important:
-      # - This uses the separate prod backend state.
-      # - That keeps production state isolated from dev.
       - name: Terraform init
         working-directory: infra/terraform
         run: terraform init -input=false -backend-config="env/prod-backend.hcl"
@@ -115,10 +124,6 @@ jobs:
         env:
           TF_VAR_workflow_secret: ${{ secrets.WORKFLOW_SECRET }}
         run: terraform apply -input=false -auto-approve -var-file="env/prod.tfvars"
-
-      - name: Show outputs
-        working-directory: infra/terraform
-        run: terraform output
 
       - name: Capture API endpoint
         working-directory: infra/terraform

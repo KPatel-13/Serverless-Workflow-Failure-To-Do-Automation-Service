@@ -10,7 +10,6 @@ class ServiceError(Exception):
     Small custom exception used for expected service-level errors.
 
     The handler catches this and turns it into a consistent HTTP response.
-     - Will help for malformed requests
 
     Example codes used elsewhere:
     - INVALID_JSON
@@ -71,10 +70,10 @@ def require_secret(headers: dict) -> None:
 
     Why:
     - POST /workflow-failure should only be callable by the simulator/upstream workflow
-    - PATCH /todos/{id} changes state, so it should also be protected
-    - secret is read from the Lambda environment variable WORKFLOW_SECRET
+    - the secret is read from the Lambda environment variable WORKFLOW_SECRET
 
-    Important:
+    Notes:
+    - browser PATCH updates intentionally do not use this shared secret
     - treat an empty/missing env var as a security failure as well
     - never log the provided secret value
     """
@@ -98,11 +97,11 @@ def _norm(value: str | None) -> str:
 
     Why:
     We want small formatting differences to not create a brand new ticket.
+
     For example:
     - extra spaces
     - different capitalisation
     - inconsistent line spacing
-
     """
     if value is None:
         return ""
@@ -128,7 +127,6 @@ def compute_fingerprint(
     - job name
     - summary
     - details
-
     """
     stable = (
         _norm(repo)
@@ -158,8 +156,8 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
         {
           "jobName": "...",
           "summary": "...",
-          "details": "...",      # optional
-          "severity": "..."      # optional
+          "details": "...",   # optional
+          "severity": "..."   # optional
         }
       ]
     }
@@ -192,6 +190,7 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
     for failure in payload["failures"]:
         if not isinstance(failure, dict):
             raise ServiceError("VALIDATION_ERROR", "Each failure must be an object")
+
         for key in ["jobName", "summary"]:
             if key not in failure or not str(failure[key]).strip():
                 raise ServiceError(
@@ -209,6 +208,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
 
         open_ticket = repo_obj.get_open_by_fingerprint(fingerprint)
         if open_ticket:
+            # Same failure while the ticket is still open:
+            # - keep the existing board position if it is valid
+            # - bump occurrence count and last seen details
             open_ticket["occurrenceCount"] = int(open_ticket.get("occurrenceCount", 1)) + 1
             open_ticket["lastSeenAt"] = now
             open_ticket["updatedAt"] = now
@@ -225,6 +227,9 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
 
         existing = repo_obj.get_by_id(fingerprint)
         if existing and existing.get("status") == "done":
+            # Same failure after the ticket was closed:
+            # - reopen the same ticket
+            # - send it back to To Do
             existing["status"] = "open"
             existing["workflowState"] = "todo"
             existing["resolvedAt"] = None
@@ -263,7 +268,6 @@ def ingest_workflow_failures(repo_obj, headers: dict, payload: dict) -> dict:
             "updatedAt": now,
             "resolvedAt": None,
         }
-
         repo_obj.upsert(ticket)
         print(json.dumps({"ingest_result": {"action": "created", "id": ticket["id"]}}))
         created += 1
@@ -304,8 +308,11 @@ def patch_todo_status(repo_obj, headers: dict, ticket_id: str, payload: dict) ->
     - {"status": "open", "workflowState": "todo"}
     - {"status": "open", "workflowState": "in_progress"}
 
+    Notes:
+    - this route is used by the browser board
+    - keep headers in the signature for compatibility with the current handler/tests
+    - PATCH does not use the shared workflow secret now
     """
-
     status = payload.get("status")
     workflow_state = payload.get("workflowState")
 
@@ -328,7 +335,6 @@ def patch_todo_status(repo_obj, headers: dict, ticket_id: str, payload: dict) ->
         raise ServiceError("NOT_FOUND", "Ticket not found")
 
     now = now_iso_utc()
-
     ticket["status"] = status
     ticket["updatedAt"] = now
 
