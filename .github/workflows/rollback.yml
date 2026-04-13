@@ -1,0 +1,171 @@
+name: Prod Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag_choice:
+        description: "Choose a common rollback tag"
+        required: false
+        type: choice
+        options:
+          - ""
+          - v1.0.0
+          - v1.0.1
+          - v1.1.0
+          - v1.1.1
+          - v1.2.0
+      release_tag_manual:
+        description: "Or type a specific tag, for example v1.2.3"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  rollback-prod:
+    name: Roll back prod to previous tag
+    runs-on: ubuntu-latest
+    environment: prod-rollback
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve rollback tag
+        run: |
+          CHOICE="${{ inputs.release_tag_choice }}"
+          MANUAL="${{ inputs.release_tag_manual }}"
+
+          if [ -n "$MANUAL" ] && [ -n "$CHOICE" ]; then
+            echo "Use either release_tag_choice or release_tag_manual, not both."
+            exit 1
+          fi
+
+          if [ -n "$MANUAL" ]; then
+            TAG="$MANUAL"
+          elif [ -n "$CHOICE" ]; then
+            TAG="$CHOICE"
+          else
+            echo "You must provide a rollback tag."
+            exit 1
+          fi
+
+          echo "ROLLBACK_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Validate release tag exists
+        run: |
+          git fetch --tags --force
+          if ! git rev-parse "refs/tags/$ROLLBACK_TAG" >/dev/null 2>&1; then
+            echo "Tag '$ROLLBACK_TAG' does not exist."
+            echo "Available recent tags:"
+            git tag --sort=-creatordate | head -n 20
+            exit 1
+          fi
+
+      - name: Checkout selected release tag
+        run: git checkout "refs/tags/$ROLLBACK_TAG"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: Install zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Build lambda.zip
+        run: |
+          chmod +x scripts/build_lambda.sh
+          ./scripts/build_lambda.sh
+
+      - name: Check lambda.zip exists
+        run: test -f lambda.zip
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Verify AWS caller identity
+        run: aws sts get-caller-identity
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init -input=false -backend-config="env/prod-backend.hcl"
+
+      - name: Terraform plan
+        working-directory: infra/terraform
+        env:
+          TF_VAR_workflow_secret: ${{ secrets.WORKFLOW_SECRET }}
+        run: terraform plan -input=false -var-file="env/prod.tfvars"
+
+      - name: Terraform apply
+        working-directory: infra/terraform
+        env:
+          TF_VAR_workflow_secret: ${{ secrets.WORKFLOW_SECRET }}
+        run: terraform apply -input=false -auto-approve -var-file="env/prod.tfvars"
+
+      - name: Capture API endpoint
+        working-directory: infra/terraform
+        run: echo "HTTP_API_ENDPOINT=$(terraform output -raw http_api_endpoint)" >> $GITHUB_ENV
+
+      - name: Capture frontend bucket name
+        working-directory: infra/terraform
+        run: echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_ENV
+
+      - name: Capture CloudFront distribution id
+        working-directory: infra/terraform
+        run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> $GITHUB_ENV
+
+      - name: Inject frontend API base URL
+        env:
+          FRONTEND_API_BASE_URL: ${{ env.HTTP_API_ENDPOINT }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("frontend/app.js")
+          content = path.read_text(encoding="utf-8")
+
+          placeholder = "__API_BASE_URL__"
+          value = os.environ["FRONTEND_API_BASE_URL"].strip().rstrip("/")
+
+          if placeholder not in content:
+              raise SystemExit("Missing __API_BASE_URL__ placeholder in frontend/app.js")
+
+          if not value:
+              raise SystemExit("HTTP_API_ENDPOINT is empty")
+
+          content = content.replace(placeholder, value)
+          path.write_text(content, encoding="utf-8")
+          PY
+
+      - name: Upload frontend files to S3
+        run: aws s3 sync ./frontend s3://$FRONTEND_BUCKET/frontend --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$FRONTEND_CF_DISTRIBUTION_ID" \
+            --paths "/frontend/*"
