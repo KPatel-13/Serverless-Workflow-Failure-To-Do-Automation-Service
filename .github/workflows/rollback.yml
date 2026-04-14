@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   rollback-prod:
-    name: Roll back prod to previous tag
+    name: Roll back prod application to previous tag
     runs-on: ubuntu-latest
     environment: prod
 
@@ -81,11 +81,6 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_wrapper: false
-
       - name: Install zip
         run: |
           sudo apt-get update
@@ -99,6 +94,30 @@ jobs:
       - name: Check lambda.zip exists
         run: test -f lambda.zip
 
+      - name: Check required rollback secrets are present
+        run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "AWS_ACCESS_KEY_ID is missing in this environment"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "AWS_SECRET_ACCESS_KEY is missing in this environment"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.WORKFLOW_SECRET }}" ]; then
+            echo "WORKFLOW_SECRET is missing in this environment"
+            exit 1
+          fi
+
+      - name: Check required rollback variables are present
+        run: |
+          if [ -z "${{ vars.PROD_LAMBDA_FUNCTION_NAME }}" ]; then
+            echo "PROD_LAMBDA_FUNCTION_NAME is missing in the prod environment variables"
+            exit 1
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -109,33 +128,27 @@ jobs:
       - name: Verify AWS caller identity
         run: aws sts get-caller-identity
 
+      # We still read the current Terraform state outputs so we can discover
+      # the active prod API endpoint, frontend bucket, and CloudFront distribution.
+      # Important: this rollback does NOT run terraform apply.
       - name: Terraform init
         working-directory: infra/terraform
         run: terraform init -input=false -backend-config="env/prod-backend.hcl"
 
-      - name: Terraform plan
-        working-directory: infra/terraform
-        env:
-          TF_VAR_workflow_secret: ${{ secrets.WORKFLOW_SECRET }}
-        run: terraform plan -input=false -var-file="env/prod.tfvars"
-
-      - name: Terraform apply
-        working-directory: infra/terraform
-        env:
-          TF_VAR_workflow_secret: ${{ secrets.WORKFLOW_SECRET }}
-        run: terraform apply -input=false -auto-approve -var-file="env/prod.tfvars"
-
       - name: Capture API endpoint
         working-directory: infra/terraform
-        run: echo "HTTP_API_ENDPOINT=$(terraform output -raw http_api_endpoint)" >> $GITHUB_ENV
+        run: echo "HTTP_API_ENDPOINT=$(terraform output -raw http_api_endpoint)" >> "$GITHUB_ENV"
 
       - name: Capture frontend bucket name
         working-directory: infra/terraform
-        run: echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_ENV
+        run: echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_ENV"
 
       - name: Capture CloudFront distribution id
         working-directory: infra/terraform
-        run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> $GITHUB_ENV
+        run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> "$GITHUB_ENV"
+
+      - name: Capture Lambda function name
+        run: echo "LAMBDA_FUNCTION_NAME=${{ vars.PROD_LAMBDA_FUNCTION_NAME }}" >> "$GITHUB_ENV"
 
       - name: Inject frontend API base URL
         env:
@@ -161,6 +174,12 @@ jobs:
           path.write_text(content, encoding="utf-8")
           PY
 
+      - name: Update Lambda function code only
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --zip-file "fileb://lambda.zip"
+
       - name: Upload frontend files to S3
         run: aws s3 sync ./frontend s3://$FRONTEND_BUCKET/frontend --delete
 
@@ -168,4 +187,4 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "$FRONTEND_CF_DISTRIBUTION_ID" \
-            --paths "/frontend/*"
+            --paths "/frontend" "/frontend/" "/frontend/*"
