@@ -111,13 +111,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check required rollback variables are present
-        run: |
-          if [ -z "${{ vars.PROD_LAMBDA_FUNCTION_NAME }}" ]; then
-            echo "PROD_LAMBDA_FUNCTION_NAME is missing in the prod environment variables"
-            exit 1
-          fi
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -148,7 +141,8 @@ jobs:
         run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> "$GITHUB_ENV"
 
       - name: Capture Lambda function name
-        run: echo "LAMBDA_FUNCTION_NAME=${{ vars.PROD_LAMBDA_FUNCTION_NAME }}" >> "$GITHUB_ENV"
+        working-directory: infra/terraform
+        run: echo "LAMBDA_FUNCTION_NAME=$(terraform output -raw lambda_function_name)" >> "$GITHUB_ENV"
 
       - name: Inject frontend API base URL
         env:
