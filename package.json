@@ -1,0 +1,12 @@
+{
+  "name": "serverless-workflow-failure-to-do-automation-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint:frontend": "eslint frontend/"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "globals": "^15.15.0"
+  }
+}
