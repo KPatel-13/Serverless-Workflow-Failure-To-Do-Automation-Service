@@ -33,10 +33,12 @@ jobs:
     environment: prod
 
     steps:
-      - name: Checkout repository
+      - name: Checkout current main for infra metadata
         uses: actions/checkout@v6
         with:
+          ref: main
           fetch-depth: 0
+          path: current_main
 
       - name: Resolve rollback tag
         run: |
@@ -60,6 +62,7 @@ jobs:
           echo "ROLLBACK_TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Validate release tag exists
+        working-directory: current_main
         run: |
           git fetch --tags --force
           if ! git rev-parse "refs/tags/$ROLLBACK_TAG" >/dev/null 2>&1; then
@@ -69,8 +72,11 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout selected release tag
-        run: git checkout "refs/tags/$ROLLBACK_TAG"
+      - name: Checkout selected release tag into rollback_src
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.ROLLBACK_TAG }}
+          path: rollback_src
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -78,20 +84,27 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+            rollback_src/requirements.txt
+            rollback_src/requirements-dev.txt
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Install zip
         run: |
           sudo apt-get update
           sudo apt-get install -y zip
 
-      - name: Build lambda.zip
+      - name: Build lambda.zip from rollback tag
+        working-directory: rollback_src
         run: |
           chmod +x scripts/build_lambda.sh
           ./scripts/build_lambda.sh
 
       - name: Check lambda.zip exists
+        working-directory: rollback_src
         run: test -f lambda.zip
 
       - name: Check required rollback secrets are present
@@ -121,30 +134,30 @@ jobs:
       - name: Verify AWS caller identity
         run: aws sts get-caller-identity
 
-      # We still read the current Terraform state outputs so we can discover
-      # the active prod API endpoint, frontend bucket, and CloudFront distribution.
-      # Important: this rollback does NOT run terraform apply.
+      # Read current prod Terraform state from main.
+      # We use this only to discover the active prod resource names/ids.
+      # This rollback intentionally does NOT run terraform apply.
       - name: Terraform init
-        working-directory: infra/terraform
+        working-directory: current_main/infra/terraform
         run: terraform init -input=false -backend-config="env/prod-backend.hcl"
 
       - name: Capture API endpoint
-        working-directory: infra/terraform
+        working-directory: current_main/infra/terraform
         run: echo "HTTP_API_ENDPOINT=$(terraform output -raw http_api_endpoint)" >> "$GITHUB_ENV"
 
       - name: Capture frontend bucket name
-        working-directory: infra/terraform
+        working-directory: current_main/infra/terraform
         run: echo "FRONTEND_BUCKET=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_ENV"
 
       - name: Capture CloudFront distribution id
-        working-directory: infra/terraform
+        working-directory: current_main/infra/terraform
         run: echo "FRONTEND_CF_DISTRIBUTION_ID=$(terraform output -raw frontend_cloudfront_distribution_id)" >> "$GITHUB_ENV"
 
       - name: Capture Lambda function name
-        working-directory: infra/terraform
+        working-directory: current_main/infra/terraform
         run: echo "LAMBDA_FUNCTION_NAME=$(terraform output -raw lambda_function_name)" >> "$GITHUB_ENV"
 
-      - name: Inject frontend API base URL
+      - name: Inject frontend API base URL into rollback frontend
         env:
           FRONTEND_API_BASE_URL: ${{ env.HTTP_API_ENDPOINT }}
         run: |
@@ -152,14 +165,14 @@ jobs:
           from pathlib import Path
           import os
 
-          path = Path("frontend/app.js")
+          path = Path("rollback_src/frontend/app.js")
           content = path.read_text(encoding="utf-8")
 
           placeholder = "__API_BASE_URL__"
           value = os.environ["FRONTEND_API_BASE_URL"].strip().rstrip("/")
 
           if placeholder not in content:
-              raise SystemExit("Missing __API_BASE_URL__ placeholder in frontend/app.js")
+              raise SystemExit("Missing __API_BASE_URL__ placeholder in rollback_src/frontend/app.js")
 
           if not value:
               raise SystemExit("HTTP_API_ENDPOINT is empty")
@@ -172,10 +185,10 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name "$LAMBDA_FUNCTION_NAME" \
-            --zip-file "fileb://lambda.zip"
+            --zip-file "fileb://rollback_src/lambda.zip"
 
       - name: Upload frontend files to S3
-        run: aws s3 sync ./frontend s3://$FRONTEND_BUCKET/frontend --delete
+        run: aws s3 sync ./rollback_src/frontend s3://$FRONTEND_BUCKET/frontend --delete
 
       - name: Invalidate CloudFront cache
         run: |
