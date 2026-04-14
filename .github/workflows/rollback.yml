@@ -30,7 +30,7 @@ jobs:
   rollback-prod:
     name: Roll back prod to previous tag
     runs-on: ubuntu-latest
-    environment: prod-rollback
+    environment: prod
 
     steps:
       - name: Checkout repository
