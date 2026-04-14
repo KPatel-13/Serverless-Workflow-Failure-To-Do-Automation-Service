@@ -37,3 +37,12 @@ GitHub Actions / Upstream Workflow
           DynamoDB Table
 
 Frontend (HTML/CSS/JS) -> S3 + CloudFront
+```
+---
+
+##Local Development
+Prerequisites
+ - Python 3.11
+ - Terraform
+ - AWS CLI configured
+ - GitHub repository secrets configured for deployment
