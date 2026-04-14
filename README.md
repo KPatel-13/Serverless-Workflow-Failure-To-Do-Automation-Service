@@ -40,7 +40,7 @@ Frontend (HTML/CSS/JS) -> S3 + CloudFront
 ```
 ---
 
-##Local Development
+## Local Development
 Prerequisites
  - Python 3.11
  - Terraform
