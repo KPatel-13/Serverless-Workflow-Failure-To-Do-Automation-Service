@@ -1,43 +1,39 @@
-# Serverless-Workflow-Failure-To-Do-Automation-Service
-EPA project for DevOps apprenticeship
+# Serverless Workflow Failure To-Do Automation Service
 
-# Serverless Workflow Failure → To-Do Automation Service
+This is a serverless application that converts workflow failures into actionable To-Do tickets, stores them in DynamoDB, and provides a simple frontend for users to view, resolve, and reopen tasks.
 
-Automatically converts workflow failure events (e.g., CI/CD failures) into actionable To-Do “tickets” that can be viewed and resolved via a lightweight API and simple UI.
+This project was built as part of a **BCS Level 4 DevOps Engineer Apprenticeship** work-based project. It demonstrates how **automation, observability, security, infrastructure as code, and CI/CD** can be combined to reduce manual operational effort and improve visibility of failures.
 
-## Problem
-Workflow failures are often discovered late (manual log checking or user reports). This project aims to improve awareness and tracking by:
-- ingesting workflow failure events automatically
-- deduplicating repeated failures into the same open ticket
-- enabling users to view and resolve/unresolve tickets
+---
 
-## High-level architecture (v1)
-**Inputs**
-- Human users via a simple browser UI (frontend)
-- Upstream workflows (simulated via GitHub Actions) sending failure events
+## Overview
 
-**Processing**
-- API Gateway (HTTP API) routes requests and handles CORS
-- AWS Lambda (Python 3.11) validates requests, applies dedupe rules, and performs CRUD
+In many teams, workflow failures are discovered too late or require manual checking of logs and pipelines. This project reduces that overhead by automatically turning failures into tracked To-Do items.
 
-**Storage**
-- Database stores ticket records and workflow metadata
+### Core outcomes
+- Automatically convert workflow failures into To-Do tickets
+- Deduplicate repeated failures using a deterministic fingerprint
+- Reopen previously resolved tickets if the same failure happens again
+- Track recurrence with `occurrenceCount` and `lastSeenAt`
+- Provide a minimal UI for viewing, resolving, and reopening tickets
+- Deploy infrastructure consistently with Terraform
+- Run automated quality and security checks in CI/CD
+- Support troubleshooting with structured logs and CloudWatch alarms
 
-See: `docs/architecture.md`
+---
 
-## API contract (planned)
-Target endpoints:
-- `POST /workflow-failure` (requires header `X-Workflow-Secret`)
-- `GET /todos` (optional `?status=open|done`)
-- `PATCH /todos/{id}` (resolve/unresolve)
-- Optional: `DELETE /todos/{id}` (later)
+## Architecture
 
-See: `docs/api-contract.md`
+```text
+GitHub Actions / Upstream Workflow
+                |
+                v
+      API Gateway (HTTP API)
+                |
+                v
+        Lambda (Python 3.11)
+                |
+                v
+          DynamoDB Table
 
-## Dedupe strategy (planned)
-Repeated identical failures should update the existing OPEN ticket instead of creating duplicates:
-- `occurrenceCount` increments
-- `lastSeenAt` updates
-- (Reopen behavior for resolved tickets can be decided later / documented as TBD)
-
-See: `docs/data-model.md`
+Frontend (HTML/CSS/JS) -> S3 + CloudFront
