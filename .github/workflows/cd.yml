@@ -1,10 +1,13 @@
-# Deploys the application to the dev environment when code is merged to main.
+# Deploys the application to the dev environment only after CI passes on main.
 # Also supports manual runs from the Actions tab for safer first-time testing.
 
 name: CD Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +23,12 @@ jobs:
     name: Deploy to dev
     runs-on: ubuntu-latest
     environment: dev
+
+    # For workflow_run: only deploy if CI actually passed.
+    # For workflow_dispatch: always allow (manual override).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Checkout
