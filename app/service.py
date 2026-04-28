@@ -14,7 +14,7 @@ class ServiceError(Exception):
     Example codes used elsewhere:
     - INVALID_JSON
     - VALIDATION_ERROR
-    - UNAUTHORIZED
+    - UNAUTHORISED
     - NOT_FOUND
     """
 
@@ -88,7 +88,7 @@ def require_secret(headers: dict) -> None:
             break
 
     if not expected or provided != expected:
-        raise ServiceError("UNAUTHORIZED", "Missing or invalid X-Workflow-Secret")
+        raise ServiceError("UNAUTHORISED", "Missing or invalid X-Workflow-Secret")
 
 
 def _norm(value: str | None) -> str:

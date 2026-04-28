@@ -164,7 +164,7 @@ def lambda_handler(event: dict, context: Any, repo=None) -> dict:
         status_code = {
             "INVALID_JSON": 400,
             "VALIDATION_ERROR": 400,
-            "UNAUTHORIZED": 403,
+            "UNAUTHORISED": 403,
             "NOT_FOUND": 404,
         }.get(se.code, 500)
 
