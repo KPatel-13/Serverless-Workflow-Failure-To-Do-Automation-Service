@@ -44,12 +44,12 @@ def test_fingerprint_deterministic():
     assert a == b
 
 
-def test_post_unauthorized(repo, monkeypatch):
+def test_post_unauthorised(repo, monkeypatch):
     monkeypatch.setenv("WORKFLOW_SECRET", "expected")
     evt = api_event("POST", "/workflow-failure", body={"repo": "a/b"})
     res = lambda_handler(evt, None, repo=repo)
     assert res["statusCode"] == 403
-    assert json.loads(res["body"])["error"]["code"] == "UNAUTHORIZED"
+    assert json.loads(res["body"])["error"]["code"] == "UNAUTHORISED"
 
 
 def test_post_invalid_json(repo, monkeypatch):
