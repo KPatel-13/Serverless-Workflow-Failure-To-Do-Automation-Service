@@ -19,7 +19,6 @@ on:
       - "requirements.txt"
 
   push:
-    branches: ["main"]
     paths:
       - "infra/**"
       - ".github/workflows/terraform_ci.yml"
