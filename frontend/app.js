@@ -135,7 +135,7 @@ async function fetchTickets() {
 
         renderBoard(tickets);
         updateBoardLayout();
-        setStatus(currentView === "open" ? "Open board up to date." : "Closed board up to date.");
+        setStatus(currentView === "open" ? "Open ticket board up to date." : "Closed ticket board up to date.");
     } catch (error) {
         console.error("Failed to fetch tickets:", error);
         setStatus(`Error loading tickets. ${error.message}`);
