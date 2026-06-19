@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout current main for infra metadata
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Checkout selected release tag into rollback_src
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.ROLLBACK_TAG }}
           path: rollback_src
